@@ -1,0 +1,62 @@
+const express = require('express')
+const { verifyGetSignature, verifyAndDecrypt } = require('../wx-crypt')
+const config = require('../config')
+const resultStore = require('../result-store')
+
+const router = express.Router()
+
+/**
+ * 微信消息推送（URL 配置验证）
+ * GET 携带 signature/timestamp/nonce/echostr，验签通过后原样返回 echostr
+ */
+router.get('/', (req, res) => {
+  const { signature, timestamp, nonce, echostr } = req.query
+  if (!config.wxMsgToken || !verifyGetSignature({ token: config.wxMsgToken, timestamp, nonce, signature })) {
+    console.error('[wx-callback] signature 校验失败')
+    return res.status(403).send('signature error')
+  }
+  res.send(echostr)
+})
+
+/**
+ * 微信消息推送（异步检测结果）
+ * 安全模式：POST 包体为 { Encrypt, MsgSignature, TimeStamp, Nonce }
+ * 明文模式：POST 包体为事件明文 JSON
+ */
+router.post('/', (req, res) => {
+  try {
+    let event
+    if (req.body && req.body.Encrypt) {
+      const { token, timestamp, nonce, msgSignature, encrypt } = {
+        token: config.wxMsgToken,
+        timestamp: String(req.body.TimeStamp),
+        nonce: req.body.Nonce,
+        msgSignature: req.body.MsgSignature,
+        encrypt: req.body.Encrypt,
+      }
+      const decrypted = verifyAndDecrypt({ token, encodingAESKey: config.wxMsgEncodingAESKey, timestamp, nonce, msgSignature, encrypt })
+      event = JSON.parse(decrypted.msg)
+    } else {
+      event = req.body
+    }
+
+    if (event.Event === 'wxa_media_check') {
+      if (event.errcode === 0) {
+        const suggest = event.result && event.result.suggest
+        if (suggest === 'pass') {
+          resultStore.setResult(event.trace_id, { code: 0, safe: true })
+        } else {
+          resultStore.setResult(event.trace_id, { code: 87014, safe: false })
+        }
+      } else {
+        resultStore.setResult(event.trace_id, { code: event.errcode, safe: false, message: '内容检测服务异常' })
+      }
+    }
+    res.send('success')
+  } catch (e) {
+    console.error('[wx-callback] error', e.message)
+    res.status(403).send('invalid request')
+  }
+})
+
+module.exports = router

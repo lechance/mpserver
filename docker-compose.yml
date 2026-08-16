@@ -6,6 +6,8 @@ services:
       - "3000:3000"
     env_file:
       - .env
+    volumes:
+      - uploads:/app/uploads
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
@@ -13,3 +15,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  uploads:

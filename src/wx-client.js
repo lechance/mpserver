@@ -1,3 +1,4 @@
+const config = require('./config')
 const { getAccessToken, refreshAccessToken } = require('./access-token')
 
 /**
@@ -16,15 +17,39 @@ async function requestWithRetry(path, options) {
 }
 
 /**
- * 图片内容安全校验（imgSecCheck 同步接口）
- * @param {Buffer} buffer 图片字节
- * @param {string} contentType MIME 类型
- * @returns {Promise<{errcode: number, errmsg?: string}>} errcode 0=通过 87014=违规
+ * 多媒体内容安全识别（mediaCheckAsync 异步接口）
+ * 提交后返回 trace_id，检测结果通过消息推送异步到达
+ * @param {{mediaUrl: string, mediaType: number, scene: number, openid: string}} params
+ * @returns {Promise<{errcode: number, errmsg?: string, trace_id?: string}>}
  */
-async function imgSecCheck(buffer, contentType) {
-  const form = new FormData()
-  form.append('media', new Blob([buffer], { type: contentType }), 'image')
-  return requestWithRetry('/wxa/img_sec_check', { method: 'POST', body: form })
+async function mediaCheckAsync({ mediaUrl, mediaType, scene, openid }) {
+  return requestWithRetry('/wxa/media_check_async', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      media_url: mediaUrl,
+      media_type: mediaType,
+      version: 2,
+      scene,
+      openid,
+    }),
+  })
 }
 
-module.exports = { imgSecCheck }
+/**
+ * wx.login 的 code 换取 openid/session_key（jscode2session，无需 access_token）
+ * @param {string} code 小程序 wx.login 返回的临时凭证
+ * @returns {Promise<{openid?: string, session_key?: string, errcode?: number, errmsg?: string}>}
+ */
+async function code2Session(code) {
+  const url =
+    'https://api.weixin.qq.com/sns/jscode2session' +
+    `?appid=${encodeURIComponent(config.appid)}` +
+    `&secret=${encodeURIComponent(config.appsecret)}` +
+    `&js_code=${encodeURIComponent(code)}` +
+    '&grant_type=authorization_code'
+  const res = await fetch(url)
+  return res.json()
+}
+
+module.exports = { mediaCheckAsync, code2Session }
