@@ -10,4 +10,5 @@ module.exports = {
   wxMsgEncodingAESKey: process.env.WX_MSG_ENCODING_AES_KEY || '',
   secCheckScene: Number(process.env.SEC_CHECK_SCENE) || 1,
   uploadDir: process.env.UPLOAD_DIR || require('path').join(__dirname, '..', 'uploads'),
+  debug: process.env.DEBUG === 'true' || process.env.DEBUG === '1',
 }

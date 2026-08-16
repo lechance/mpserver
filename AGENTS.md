@@ -10,7 +10,8 @@ WeChat mini-program backend for image content-security (`mediaCheckAsync`, async
 
 ## Environment
 
-- `src/config.js` runs `require('dotenv').config()` at load time and reads `APPID`, `APPSECRET`, `PORT`, `MAX_IMAGE_SIZE`, `PUBLIC_BASE_URL`, `WX_MSG_TOKEN`, `WX_MSG_ENCODING_AES_KEY`, `SEC_CHECK_SCENE`, `UPLOAD_DIR`. `.env` is gitignored; only `.env.example` is committed.
+- `src/config.js` runs `require('dotenv').config()` at load time and reads `APPID`, `APPSECRET`, `PORT`, `MAX_IMAGE_SIZE`, `PUBLIC_BASE_URL`, `WX_MSG_TOKEN`, `WX_MSG_ENCODING_AES_KEY`, `SEC_CHECK_SCENE`, `UPLOAD_DIR`, `DEBUG`. `.env` is gitignored; only `.env.example` is committed.
+- `DEBUG=true` enables verbose request logging middleware in `server.js` (method/path/status/duration/`trace_id`), submit success logs, and callback decrypt detail logs — useful for diagnosing async results that never arrive.
 - `APPID`/`APPSECRET`/`PUBLIC_BASE_URL` are required for real sec-check requests but **not** for `/health`. Without them, `POST /api/sec-check/image` returns 500 with `message: '服务未配置'`.
 - `WX_MSG_TOKEN`/`WX_MSG_ENCODING_AES_KEY` are needed for `/api/sec-check/callback` (WeChat message push); without them the callback returns 403.
 - docker-compose uses `env_file: .env`, so a local `.env` must exist before `docker compose up`. `uploads/` is a named Docker volume so stored images survive restarts.

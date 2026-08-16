@@ -61,6 +61,9 @@ router.post('/image', upload.single('media'), async (req, res) => {
     })
     if (data.errcode === 0 && data.trace_id) {
       resultStore.createPending(data.trace_id)
+      if (config.debug) {
+        console.log(`[debug] 图片已提交检测 trace_id=${data.trace_id} file=${filename}`)
+      }
       return res.json({ code: 0, trace_id: data.trace_id })
     }
     console.error('[mediaCheckAsync] wechat error', data)

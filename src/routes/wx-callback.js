@@ -15,6 +15,9 @@ router.get('/', (req, res) => {
     console.error('[wx-callback] signature 校验失败')
     return res.status(403).send('signature error')
   }
+  if (config.debug) {
+    console.log(`[debug] wx-callback URL 验证通过 timestamp=${timestamp} nonce=${nonce}`)
+  }
   res.send(echostr)
 })
 
@@ -26,7 +29,9 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   try {
     let event
+    let mode = '明文'
     if (req.body && req.body.Encrypt) {
+      mode = '安全模式'
       const { token, timestamp, nonce, msgSignature, encrypt } = {
         token: config.wxMsgToken,
         timestamp: String(req.body.TimeStamp),
@@ -38,6 +43,12 @@ router.post('/', (req, res) => {
       event = JSON.parse(decrypted.msg)
     } else {
       event = req.body
+    }
+
+    if (config.debug) {
+      console.log(
+        `[debug] wx-callback 收到推送(${mode}) Event=${event.Event} trace_id=${event.trace_id} errcode=${event.errcode} suggest=${event.result && event.result.suggest}`
+      )
     }
 
     if (event.Event === 'wxa_media_check') {
