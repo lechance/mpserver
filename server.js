@@ -2,6 +2,8 @@ const express = require('express')
 const config = require('./src/config')
 
 const app = express()
+// 单层反向代理后取真实客户端 IP（用于限流），多级代理请调整为跳数
+app.set('trust proxy', 1)
 app.use(express.json())
 
 // 调试日志：DEBUG=true 时记录每个请求的方法、路径、状态码、耗时（及 trace_id）

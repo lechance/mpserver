@@ -9,10 +9,11 @@ const results = new Map()
 
 /**
  * @param {string} traceId
- * @returns {{status: 'pending'|'done', traceId: string, code?: number, safe?: boolean, message?: string}}
+ * @param {string} token 轮询结果所需的访问令牌
+ * @returns {{status: 'pending'|'done', traceId: string, token: string, code?: number, safe?: boolean, message?: string}}
  */
-function createPending(traceId) {
-  const record = { status: 'pending', traceId, expiresAt: Date.now() + TTL_MS }
+function createPending(traceId, token) {
+  const record = { status: 'pending', traceId, token, expiresAt: Date.now() + TTL_MS }
   results.set(traceId, record)
   return record
 }

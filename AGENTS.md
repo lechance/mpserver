@@ -10,11 +10,12 @@ WeChat mini-program backend for image content-security (`mediaCheckAsync`, async
 
 ## Environment
 
-- `src/config.js` runs `require('dotenv').config()` at load time and reads `APPID`, `APPSECRET`, `PORT`, `MAX_IMAGE_SIZE`, `PUBLIC_BASE_URL`, `WX_MSG_TOKEN`, `WX_MSG_ENCODING_AES_KEY`, `SEC_CHECK_SCENE`, `UPLOAD_DIR`, `DEBUG`. `.env` is gitignored; only `.env.example` is committed.
+- `src/config.js` runs `require('dotenv').config()` at load time and reads `APPID`, `APPSECRET`, `PORT`, `MAX_IMAGE_SIZE`, `PUBLIC_BASE_URL`, `WX_MSG_TOKEN`, `WX_MSG_ENCODING_AES_KEY`, `SEC_CHECK_SCENE`, `UPLOAD_DIR`, `DEBUG`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS`. `.env` is gitignored; only `.env.example` is committed.
 - `DEBUG=true` enables verbose request logging middleware in `server.js` (method/path/status/duration/`trace_id`), submit success logs, and callback decrypt detail logs — useful for diagnosing async results that never arrive.
+- Submit is rate-limited per-IP (default 10/min via `src/rate-limit.js`); `server.js` sets `trust proxy` to 1 hop so `req.ip` works behind a single reverse proxy.
 - `APPID`/`APPSECRET`/`PUBLIC_BASE_URL` are required for real sec-check requests but **not** for `/health`. Without them, `POST /api/sec-check/image` returns 500 with `message: '服务未配置'`.
 - `WX_MSG_TOKEN`/`WX_MSG_ENCODING_AES_KEY` are needed for `/api/sec-check/callback` (WeChat message push); without them the callback returns 403.
-- docker-compose uses `env_file: .env`, so a local `.env` must exist before `docker compose up`. `uploads/` is a named Docker volume so stored images survive restarts.
+- docker-compose uses `env_file: .env`, so a local `.env` must exist before `docker compose up`. `uploads/` is a named Docker volume so stored images survive restarts. The Dockerfile runs as non-root user `app` and chowns `/app/uploads`; **pre-existing volumes** from before that change are root-owned → `EACCES` on submit (submit returns 500 `存储目录无写入权限`), fix with `docker exec -u root mpserver chown -R app:app /app/uploads`.
 
 ## Runtime quirks
 
@@ -24,9 +25,9 @@ WeChat mini-program backend for image content-security (`mediaCheckAsync`, async
 
 ## API contract (async flow)
 
-`POST /api/sec-check/image` — multipart, fields `media` (image) + `code` (`wx.login` token). Only `image/png`, `image/jpeg`, `image/gif` (checked via `file.mimetype` in `src/routes/sec-check.js`). Server exchanges `code`→openid (`code2Session`), saves the file to `UPLOAD_DIR`, calls `mediaCheckAsync`, and returns `{ code: 0, trace_id }` immediately — the check result is **asynchronous**.
+`POST /api/sec-check/image` — multipart, fields `media` (image) + `code` (`wx.login` token). Only `image/png`, `image/jpeg`, `image/gif` (checked via `file.mimetype` in `src/routes/sec-check.js`). Server exchanges `code`→openid (`code2Session`), saves the file to `UPLOAD_DIR`, calls `mediaCheckAsync`, and returns `{ code: 0, trace_id, token }` immediately — the check result is **asynchronous**. Per-IP rate-limited (`RATE_LIMIT_MAX`/`RATE_LIMIT_WINDOW_MS`); excess → 429.
 
-`GET /api/sec-check/result?trace_id=...` — poll until done:
+`GET /api/sec-check/result?trace_id=...&token=...` — poll until done; `token` (returned by submit) must match, else 403:
 - pending → `{ code: 0, status: 'pending' }`
 - pass → `{ code: 0, safe: true }`
 - risky / review → `{ code: 87014, safe: false }` (fail-closed: only `pass` allows)
@@ -42,7 +43,7 @@ Responses always shape `{ code, safe }` when final (`safe=false` is a deliberate
 
 ## WeChat message push (`/api/sec-check/callback`)
 
-Configured in MP console 开发管理 → 消息推送配置 (**安全模式**, JSON). The `wxa_media_check` result event arrives here; `src/wx-crypt.js` verifies `msg_signature` and AES-decrypts (`aes-256-cbc`, PKCS#7, Node `crypto` only), then `src/routes/wx-callback.js` maps `result.suggest` into the result store keyed by `trace_id`.
+Configured in MP console 开发管理 → 消息推送配置 (**安全模式**, JSON). The `wxa_media_check` result event arrives here; `src/wx-crypt.js` verifies `msg_signature` and AES-decrypts (`aes-256-cbc`, PKCS#7, Node `crypto` only), then `src/routes/wx-callback.js` maps `result.suggest` into the result store keyed by `trace_id`. The plaintext-mode POST fallback also verifies the URL `signature` — unauthenticated POSTs are rejected with 403.
 
 ## WeChat integration (`src/wx-client.js`, `src/access-token.js`)
 

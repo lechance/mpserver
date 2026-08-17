@@ -40,6 +40,7 @@ curl -F media=@test.png -F code=<wx.login code> http://localhost:3000/api/sec-ch
 | `SEC_CHECK_SCENE` | 检测场景（1 资料；2 评论；3 论坛；4 社交日志），默认 1 |
 | `UPLOAD_DIR` | 上传图片本地存储目录，默认 `./uploads` |
 | `DEBUG` | `true` 时打印请求日志、提交成功日志与回调解密详情 |
+| `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | 提交检测限流（每 IP 每窗口最大请求数 / 窗口毫秒数），默认 10 / 60000 |
 
 `.env` 已被 gitignore，仅提交 `.env.example`。
 
@@ -47,17 +48,17 @@ curl -F media=@test.png -F code=<wx.login code> http://localhost:3000/api/sec-ch
 
 ### 提交检测
 
-`POST /api/sec-check/image` — multipart，字段 `media`（图片）+ `code`（`wx.login` 临时凭证）。
+`POST /api/sec-check/image` — multipart，字段 `media`（图片）+ `code`（`wx.login` 临时凭证）。每 IP 限流（默认 10 次/分钟），超限返回 429。
 
 服务端用 `code` 换 openid，保存图片到 `UPLOAD_DIR`，调用 `mediaCheckAsync` 后立即返回：
 
 ```json
-{ "code": 0, "trace_id": "..." }
+{ "code": 0, "trace_id": "...", "token": "..." }
 ```
 
 ### 轮询结果
 
-`GET /api/sec-check/result?trace_id=...`
+`GET /api/sec-check/result?trace_id=...&token=...`（`token` 为提交时返回的访问令牌，需一致，否则 403）
 
 - 进行中：`{ "code": 0, "status": "pending" }`
 - 通过：`{ "code": 0, "safe": true }`
@@ -69,7 +70,7 @@ curl -F media=@test.png -F code=<wx.login code> http://localhost:3000/api/sec-ch
 
 ### 消息推送回调
 
-`GET/POST /api/sec-check/callback` — 接收微信 `wxa_media_check` 结果事件，验签并 AES 解密后写入结果存储。
+`GET/POST /api/sec-check/callback` — 接收微信 `wxa_media_check` 结果事件，验签并 AES 解密后写入结果存储。明文模式的 POST 同样校验 URL 上的 `signature`，未通过验签的请求返回 403。
 
 ### 静态资源
 
@@ -77,7 +78,7 @@ curl -F media=@test.png -F code=<wx.login code> http://localhost:3000/api/sec-ch
 
 ## 微信小程序接入
 
-小程序侧调用 `wx.login()` 获取 `code`，再 `wx.uploadFile` 上传图片并携带 `code`；拿到 `trace_id` 后轮询结果接口，直到拿到 `safe`。
+小程序侧调用 `wx.login()` 获取 `code`，再 `wx.uploadFile` 上传图片并携带 `code`；拿到 `trace_id` 与 `token` 后轮询结果接口（携带 `token`），直到拿到 `safe`。
 
 小程序端仅需在「request 合法域名」中配置后端域名即可。
 
@@ -97,6 +98,11 @@ docker compose up -d --build
 ```
 
 要求域名可公网 HTTPS 访问（微信下载图片与回调都依赖 443）。生产建议在容器前加反向代理终结 TLS。
+
+容器内以非 root 用户 `app` 运行，`uploads` 数据卷需可写。若升级前已存在旧卷（root 属主），一次执行：
+`docker exec -u root mpserver chown -R app:app /app/uploads`（或 `docker compose down -v` 重建卷）。
+
+**排错**：提交返回 `存储目录无写入权限`（`EACCES`/`EPERM`）即为上述卷权限问题。
 
 ## 调试
 

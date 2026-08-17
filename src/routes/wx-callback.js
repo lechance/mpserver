@@ -24,7 +24,7 @@ router.get('/', (req, res) => {
 /**
  * 微信消息推送（异步检测结果）
  * 安全模式：POST 包体为 { Encrypt, MsgSignature, TimeStamp, Nonce }
- * 明文模式：POST 包体为事件明文 JSON
+ * 明文模式：POST 包体为事件明文 JSON，需校验 URL 上的 signature/timestamp/nonce
  */
 router.post('/', (req, res) => {
   try {
@@ -43,6 +43,10 @@ router.post('/', (req, res) => {
       event = JSON.parse(decrypted.msg)
     } else {
       event = req.body
+      const { signature, timestamp, nonce } = req.query
+      if (!config.wxMsgToken || !verifyGetSignature({ token: config.wxMsgToken, timestamp, nonce, signature })) {
+        throw new Error('signature 校验失败')
+      }
     }
 
     if (config.debug) {
