@@ -3,7 +3,7 @@
  * 结果通过微信消息推送异步到达，先以 trace_id 记为 pending，收到推送后写入最终结果。
  */
 
-const TTL_MS = 30 * 60 * 1000
+const TTL_MS = 60 * 60 * 1000
 
 const results = new Map()
 
@@ -24,7 +24,10 @@ function createPending(traceId, token) {
  */
 function setResult(traceId, result) {
   const record = results.get(traceId)
-  if (!record) return
+  if (!record) {
+    console.error(`[result-store] 收到未知 trace_id 的回调，已丢弃: ${traceId}`)
+    return
+  }
   Object.assign(record, result, { status: 'done', expiresAt: Date.now() + TTL_MS })
 }
 

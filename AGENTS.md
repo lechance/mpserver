@@ -21,11 +21,11 @@ WeChat mini-program backend for image content-security (`mediaCheckAsync`, async
 
 - Requires Node >= 18 (uses global `fetch`, `crypto`, `FormData`, `Blob` directly — no undici/node-fetch/crypto dep). Dockerfile builds on `node:24-alpine` and runs `npm ci`.
 - Deps are `express`, `multer`, `dotenv` only. Don't add packages for things Node globals already provide.
-- `src/result-store.js` keeps async results **in memory** keyed by `trace_id` (TTL 30min) — single-instance only; pending results are lost on restart.
+- `src/result-store.js` keeps async results **in memory** keyed by `trace_id` (TTL 60min) — single-instance only; pending results are lost on restart. Uploaded files are auto-cleaned by `src/cleanup.js` (interval 10min, deletes images idle >24h); outbound WeChat fetches use `AbortController` timeouts via `src/http.js`.
 
 ## API contract (async flow)
 
-`POST /api/sec-check/image` — multipart, fields `media` (image) + `code` (`wx.login` token). Only `image/png`, `image/jpeg`, `image/gif` (checked via `file.mimetype` in `src/routes/sec-check.js`). Server exchanges `code`→openid (`code2Session`), saves the file to `UPLOAD_DIR`, calls `mediaCheckAsync`, and returns `{ code: 0, trace_id, token }` immediately — the check result is **asynchronous**. Per-IP rate-limited (`RATE_LIMIT_MAX`/`RATE_LIMIT_WINDOW_MS`); excess → 429.
+`POST /api/sec-check/image` — multipart, fields `media` (image) + `code` (`wx.login` token). Only `image/png`, `image/jpeg`, `image/gif` (checked via `file.mimetype` **and** magic bytes in `src/routes/sec-check.js`). Server exchanges `code`→openid (`code2Session`), saves the file to `UPLOAD_DIR`, calls `mediaCheckAsync`, and returns `{ code: 0, trace_id, token }` immediately — the check result is **asynchronous**. Per-IP rate-limited (`RATE_LIMIT_MAX`/`RATE_LIMIT_WINDOW_MS`); excess → 429.
 
 `GET /api/sec-check/result?trace_id=...&token=...` — poll until done; `token` (returned by submit) must match, else 403:
 - pending → `{ code: 0, status: 'pending' }`
@@ -36,7 +36,7 @@ WeChat mini-program backend for image content-security (`mediaCheckAsync`, async
 
 Responses always shape `{ code, safe }` when final (`safe=false` is a deliberate contract: never leak violation detail to clients).
 
-- WeChat submit error (other than `0`) → 502; invalid `code` → 400
+- WeChat submit error (other than `0`) → 502; `61010` (user not visited in 2h) → 502 with `message: '用户近两小时未访问小程序，请重新进入小程序'`; invalid `code` → 400
 - multer `LIMIT_FILE_SIZE` → 413, `UNSUPPORTED_TYPE` → 415 (handled in `server.js` error middleware)
 
 `GET /media/<file>` serves stored uploads to WeChat. WeChat must be able to download it over **HTTPS:443** with a valid cert (`PUBLIC_BASE_URL`), so localhost/LAN won't work for real checks.

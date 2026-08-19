@@ -1,4 +1,5 @@
 const config = require('./config')
+const { fetchWithTimeout } = require('./http')
 
 let cache = { token: '', expiresAt: 0 }
 let fetching = null
@@ -12,7 +13,7 @@ async function fetchAccessToken() {
   const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${encodeURIComponent(
     config.appid
   )}&secret=${encodeURIComponent(config.appsecret)}`
-  const res = await fetch(url)
+  const res = await fetchWithTimeout(url, {}, 15000)
   const data = await res.json()
   if (!data.access_token) {
     const err = new Error(`微信获取 access_token 失败: ${data.errcode} ${data.errmsg}`)

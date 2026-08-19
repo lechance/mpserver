@@ -32,14 +32,17 @@ router.post('/', (req, res) => {
     let mode = '明文'
     if (req.body && req.body.Encrypt) {
       mode = '安全模式'
-      const { token, timestamp, nonce, msgSignature, encrypt } = {
+      // 微信官方文档使用 URL 上的 timestamp/nonce 计算 msg_signature（JSON 模式包体内亦有，保持一致）
+      const timestamp = String(req.query.timestamp ?? req.body.TimeStamp)
+      const nonce = req.query.nonce ?? req.body.Nonce
+      const decrypted = verifyAndDecrypt({
         token: config.wxMsgToken,
-        timestamp: String(req.body.TimeStamp),
-        nonce: req.body.Nonce,
+        encodingAESKey: config.wxMsgEncodingAESKey,
+        timestamp,
+        nonce,
         msgSignature: req.body.MsgSignature,
         encrypt: req.body.Encrypt,
-      }
-      const decrypted = verifyAndDecrypt({ token, encodingAESKey: config.wxMsgEncodingAESKey, timestamp, nonce, msgSignature, encrypt })
+      })
       event = JSON.parse(decrypted.msg)
     } else {
       event = req.body
@@ -47,6 +50,10 @@ router.post('/', (req, res) => {
       if (!config.wxMsgToken || !verifyGetSignature({ token: config.wxMsgToken, timestamp, nonce, signature })) {
         throw new Error('signature 校验失败')
       }
+    }
+
+    if (config.appid && event.appid && event.appid !== config.appid) {
+      throw new Error('appid 不匹配')
     }
 
     if (config.debug) {

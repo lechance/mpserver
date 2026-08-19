@@ -6,6 +6,7 @@ const { mediaCheckAsync, code2Session } = require('../wx-client')
 const config = require('../config')
 const resultStore = require('../result-store')
 const { createLimiter } = require('../rate-limit')
+const { startCleanup } = require('../cleanup')
 
 const ALLOWED_MIME = {
   'image/png': { ext: 'png' },
@@ -13,9 +14,22 @@ const ALLOWED_MIME = {
   'image/gif': { ext: 'gif' },
 }
 
+const IMAGE_MAGIC = {
+  'image/png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  'image/jpeg': Buffer.from([0xff, 0xd8, 0xff]),
+  'image/gif': Buffer.from([0x47, 0x49, 0x46, 0x38]),
+}
+
+function isValidImage(mimetype, buffer) {
+  const magic = IMAGE_MAGIC[mimetype]
+  if (!magic) return false
+  return buffer.length >= magic.length && buffer.subarray(0, magic.length).equals(magic)
+}
+
 fs.mkdirSync(config.uploadDir, { recursive: true })
 
 const submitLimiter = createLimiter(config.rateLimitMax, config.rateLimitWindowMs)
+startCleanup({ uploadDir: config.uploadDir, limiters: [submitLimiter] })
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -46,6 +60,10 @@ router.post('/image', upload.single('media'), async (req, res) => {
   if (!submitLimiter(req.ip)) {
     return res.status(429).json({ code: 429, safe: false, message: '请求过于频繁' })
   }
+  if (!isValidImage(req.file.mimetype, req.file.buffer)) {
+    return res.status(415).json({ code: 415, safe: false, message: '不支持的图片类型' })
+  }
+  let filename
   try {
     const session = await code2Session(req.body.code)
     if (!session.openid) {
@@ -56,7 +74,7 @@ router.post('/image', upload.single('media'), async (req, res) => {
       return res.status(502).json({ code: 502, safe: false, message: '登录服务异常' })
     }
 
-    const filename = `${crypto.randomUUID()}.${ALLOWED_MIME[req.file.mimetype].ext}`
+    filename = `${crypto.randomUUID()}.${ALLOWED_MIME[req.file.mimetype].ext}`
     fs.writeFileSync(`${config.uploadDir}/${filename}`, req.file.buffer)
 
     const data = await mediaCheckAsync({
@@ -73,10 +91,15 @@ router.post('/image', upload.single('media'), async (req, res) => {
       }
       return res.json({ code: 0, trace_id: data.trace_id, token })
     }
+    if (data.errcode === 61010) {
+      fs.unlink(`${config.uploadDir}/${filename}`, () => {})
+      return res.status(502).json({ code: 61010, safe: false, message: '用户近两小时未访问小程序，请重新进入小程序' })
+    }
     fs.unlink(`${config.uploadDir}/${filename}`, () => {})
     console.error('[mediaCheckAsync] wechat error', data)
     return res.status(502).json({ code: data.errcode || -1, safe: false, message: '内容检测服务异常' })
   } catch (e) {
+    if (filename) fs.unlink(`${config.uploadDir}/${filename}`, () => {})
     console.error('[mediaCheckAsync] error', e.message)
     if (e.code === 'CONFIG_ERROR') {
       return res.status(500).json({ code: 500, safe: false, message: '服务未配置' })
