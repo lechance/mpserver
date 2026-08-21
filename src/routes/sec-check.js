@@ -49,18 +49,23 @@ const router = express.Router()
  */
 router.post('/image', upload.single('media'), async (req, res) => {
   if (!config.appid || !config.appsecret || !config.publicBaseUrl) {
+    if (config.debug) console.log('[debug] submit 拒绝: 服务未配置')
     return res.status(500).json({ code: 500, safe: false, message: '服务未配置' })
   }
   if (!req.file) {
+    if (config.debug) console.log('[debug] submit 拒绝: 缺少图片文件')
     return res.status(400).json({ code: 400, safe: false, message: '缺少图片文件' })
   }
   if (!req.body.code) {
+    if (config.debug) console.log('[debug] submit 拒绝: 缺少 login code')
     return res.status(400).json({ code: 400, safe: false, message: '缺少 login code' })
   }
   if (!submitLimiter(req.ip)) {
+    if (config.debug) console.log(`[debug] submit 拒绝: 限流 ip=${req.ip}`)
     return res.status(429).json({ code: 429, safe: false, message: '请求过于频繁' })
   }
   if (!isValidImage(req.file.mimetype, req.file.buffer)) {
+    if (config.debug) console.log(`[debug] submit 拒绝: 文件头校验失败 mimetype=${req.file.mimetype}`)
     return res.status(415).json({ code: 415, safe: false, message: '不支持的图片类型' })
   }
   let filename
@@ -92,6 +97,7 @@ router.post('/image', upload.single('media'), async (req, res) => {
       return res.json({ code: 0, trace_id: data.trace_id, token })
     }
     if (data.errcode === 61010) {
+      if (config.debug) console.log('[debug] submit 失败: 用户近两小时未访问小程序 (61010)')
       fs.unlink(`${config.uploadDir}/${filename}`, () => {})
       return res.status(502).json({ code: 61010, safe: false, message: '用户近两小时未访问小程序，请重新进入小程序' })
     }

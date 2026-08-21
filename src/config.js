@@ -10,7 +10,7 @@ module.exports = {
   wxMsgEncodingAESKey: process.env.WX_MSG_ENCODING_AES_KEY || '',
   secCheckScene: Number(process.env.SEC_CHECK_SCENE) || 1,
   uploadDir: process.env.UPLOAD_DIR || require('path').join(__dirname, '..', 'uploads'),
-  debug: process.env.DEBUG === 'true' || process.env.DEBUG === '1',
+  debug: (process.env.DEBUG || '').toLowerCase() === 'true' || process.env.DEBUG === '1',
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX) || 10,
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
 }

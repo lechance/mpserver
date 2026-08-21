@@ -73,6 +73,8 @@ router.post('/', (req, res) => {
       } else {
         resultStore.setResult(event.trace_id, { code: event.errcode, safe: false, message: '内容检测服务异常' })
       }
+    } else if (config.debug) {
+      console.log(`[debug] wx-callback 忽略事件 Event=${event.Event}`)
     }
     res.send('success')
   } catch (e) {

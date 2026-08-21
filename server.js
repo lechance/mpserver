@@ -9,11 +9,14 @@ app.use(express.json())
 // 调试日志：DEBUG=true 时记录每个请求的方法、路径、状态码、耗时（及 trace_id）
 if (config.debug) {
   app.use((req, res, next) => {
+    if (req.path === '/health') return next()
     const start = Date.now()
     res.on('finish', () => {
-      const traceId = req.query.trace_id || (req.body && req.body.trace_id) || ''
+      const traceId = req.query.trace_id || ''
+      const code = (req.body && req.body.code) || ''
+      const extra = traceId ? ` trace_id=${traceId}` : code ? ` code=${code}` : ''
       console.log(
-        `[debug] ${req.method} ${req.originalUrl} -> ${res.statusCode} ${Date.now() - start}ms${traceId ? ` trace_id=${traceId}` : ''}`
+        `[debug] ${req.method} ${req.originalUrl} -> ${res.statusCode} ${Date.now() - start}ms${extra}`
       )
     })
     next()
