@@ -8,7 +8,7 @@ services:
       - .env
     volumes:
       - uploads:/app/uploads
-      - dbdata:/app/db
+      - ./db:/app/db
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
@@ -21,7 +21,6 @@ services:
 
 volumes:
   uploads:
-  dbdata:
 networks:
   extnet:
     external: true
