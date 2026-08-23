@@ -168,11 +168,17 @@ tr:hover{background:#f5f5f5}
 .badge.pending{background:#e6f7ff;color:#1890ff;border:1px solid #91d5ff}
 .thumb{width:48px;height:48px;border-radius:6px;object-fit:cover;background:#f0f0f0;cursor:pointer}
 .empty{text-align:center;padding:60px;color:#8c8c8c}
-.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.78);z-index:1000;align-items:center;justify-content:center}
 .modal-overlay.show{display:flex}
-.modal{background:#fff;border-radius:12px;max-width:90vw;max-height:90vh;overflow:auto;position:relative}
-.modal img{display:block;max-width:80vw;max-height:80vh;border-radius:12px}
-.modal .close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.modal{position:relative;width:92vw;height:92vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.modal img{display:block;max-width:100%;max-height:100%;cursor:grab;user-select:none;-webkit-user-drag:none;will-change:transform}
+.modal img.dragging{cursor:grabbing}
+.modal .close{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;border:none;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:11}
+.modal .close:hover{background:rgba(255,255,255,.3)}
+.zoom-bar{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:4px;align-items:center;background:rgba(0,0,0,.65);border-radius:10px;padding:4px 8px;z-index:11}
+.zoom-bar button{min-width:34px;height:34px;padding:0 8px;background:transparent;color:#fff;border:none;border-radius:6px;font-size:16px;cursor:pointer}
+.zoom-bar button:hover{background:rgba(255,255,255,.2)}
+.zoom-bar .zlevel{color:#fff;font-size:13px;min-width:52px;text-align:center}
 .toast{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:8px;color:#fff;font-size:14px;z-index:2000;opacity:0;transition:opacity .3s}
 .toast.show{opacity:1}.toast.success{background:#52c41a}.toast.error{background:#ff4d4f}.toast.info{background:#1890ff}
 @media(max-width:768px){.sidebar{width:60px}.sidebar .logo small,.sidebar nav a span{display:none}.sidebar nav a{justify-content:center;padding:12px}.sidebar .logo{font-size:14px;padding:0 0 12px;text-align:center}.main{margin-left:60px}}
@@ -223,8 +229,17 @@ tr:hover{background:#f5f5f5}
     </div>
   </div>
 </div>
-<div class="modal-overlay" id="imgModal" onclick="this.classList.remove('show')">
-  <div class="modal"><button class="close" onclick="document.getElementById('imgModal').classList.remove('show')">&times;</button><img id="modalImg"></div>
+<div class="modal-overlay" id="imgModal">
+  <div class="modal">
+    <button class="close" onclick="closeImg()">&times;</button>
+    <img id="modalImg" draggable="false" alt="">
+    <div class="zoom-bar">
+      <button onclick="zoomBy(-1)" title="缩小">&minus;</button>
+      <span class="zlevel" id="zoomLevel">100%</span>
+      <button onclick="zoomBy(1)" title="放大">+</button>
+      <button onclick="resetZoom()" title="重置" style="font-size:12px">1:1</button>
+    </div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 <script>
@@ -262,7 +277,26 @@ async function loadImages(){const d=await api('/images');if(!d)return;const tb=d
   '<td style="font-family:monospace;font-size:12px">'+f.name+'</td>'+
   '<td>'+fmtSize(f.size)+'</td>'+
   '<td>'+fmtTime(f.mtime)+'</td></tr>'}).join('')}
-function showImg(src){document.getElementById('modalImg').src=src;document.getElementById('imgModal').classList.add('show')}
+const modalImg=document.getElementById('modalImg'),imgModal=document.getElementById('imgModal')
+let zScale=1,zX=0,zY=0
+function applyZoom(){modalImg.style.transform='translate('+zX+'px,'+zY+'px) scale('+zScale+')';document.getElementById('zoomLevel').textContent=Math.round(zScale*100)+'%'}
+function resetZoom(){zScale=1;zX=0;zY=0;applyZoom()}
+function zoomBy(dir){const next=dir>0?zScale*1.25:zScale/1.25;zScale=Math.min(Math.max(next,.2),8);applyZoom()}
+function showImg(src){resetZoom();modalImg.src=src;imgModal.classList.add('show')}
+function closeImg(){imgModal.classList.remove('show');setTimeout(()=>{modalImg.src=''},200)}
+imgModal.addEventListener('wheel',e=>{e.preventDefault();zoomBy(e.deltaY<0?1:-1)},{passive:false})
+let drag=null
+function dragStart(x,y){drag={x,y};modalImg.classList.add('dragging')}
+function dragMove(x,y){if(!drag)return;zX+=x-drag.x;zY+=y-drag.y;drag={x,y};applyZoom()}
+function dragEnd(){drag=null;modalImg.classList.remove('dragging')}
+modalImg.addEventListener('mousedown',e=>{e.preventDefault();dragStart(e.clientX,e.clientY)})
+window.addEventListener('mousemove',e=>dragMove(e.clientX,e.clientY))
+window.addEventListener('mouseup',dragEnd)
+modalImg.addEventListener('dblclick',()=>{zScale>1?resetZoom():(zScale=2.5,applyZoom())})
+modalImg.addEventListener('touchstart',e=>{if(e.touches.length===1){const t=e.touches[0];dragStart(t.clientX,t.clientY)}},{passive:true})
+modalImg.addEventListener('touchmove',e=>{if(e.touches.length===1){const t=e.touches[0];dragMove(t.clientX,t.clientY)}},{passive:true})
+modalImg.addEventListener('touchend',dragEnd)
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&imgModal.classList.contains('show'))closeImg()})
 async function pruneImages(){const d=await api('/prune-images','POST');if(d)toast(d.message,'success');loadImages()}
 async function loadAudit(){const d=await api('/audit?limit=50');if(!d)return;const tb=document.getElementById('auditBody');if(!d.length){tb.innerHTML='<tr><td colspan="4" class="empty">暂无日志</td></tr>';return}tb.innerHTML=d.map(l=>{
   const evtMap={callback_pass:'推送-通过',callback_risky:'推送-违规',callback_error:'推送-异常',ignored_event:'忽略事件'}
