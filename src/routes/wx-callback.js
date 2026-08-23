@@ -67,14 +67,18 @@ router.post('/', (req, res) => {
         const suggest = event.result && event.result.suggest
         if (suggest === 'pass') {
           resultStore.setResult(event.trace_id, { code: 0, safe: true })
+          resultStore.auditLog('callback_pass', event.trace_id, `suggest=${suggest}`)
         } else {
           resultStore.setResult(event.trace_id, { code: 87014, safe: false })
+          resultStore.auditLog('callback_risky', event.trace_id, `suggest=${suggest}`)
         }
       } else {
         resultStore.setResult(event.trace_id, { code: event.errcode, safe: false, message: '内容检测服务异常' })
+        resultStore.auditLog('callback_error', event.trace_id, `errcode=${event.errcode}`)
       }
     } else if (config.debug) {
       console.log(`[debug] wx-callback 忽略事件 Event=${event.Event}`)
+      resultStore.auditLog('ignored_event', null, `Event=${event.Event}`)
     }
     res.send('success')
   } catch (e) {

@@ -54,6 +54,18 @@ router.get('/api/checks', (req, res) => {
   res.json(records)
 })
 
+router.get('/api/audit', (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200)
+  const logs = resultStore.getAuditLog(limit).map(l => ({
+    id: l.id,
+    event: l.event,
+    trace_id: l.traceId,
+    detail: l.detail,
+    createdAt: l.createdAt,
+  }))
+  res.json(logs)
+})
+
 router.get('/api/images', (req, res) => {
   const files = []
   try {
@@ -182,6 +194,7 @@ tr:hover{background:#f5f5f5}
       <a href="#" data-page="dashboard" class="active"><span class="icon">&#9632;</span><span>概览</span></a>
       <a href="#" data-page="checks"><span class="icon">&#9654;</span><span>检测记录</span></a>
       <a href="#" data-page="images"><span class="icon">&#9733;</span><span>图片管理</span></a>
+      <a href="#" data-page="audit"><span class="icon">&#9783;</span><span>审计日志</span></a>
     </nav>
     <button class="logout" onclick="doLogout()">退出登录</button>
   </div>
@@ -200,6 +213,12 @@ tr:hover{background:#f5f5f5}
       <div class="table-wrap">
         <div class="toolbar"><h3>已存储图片</h3><div><button onclick="pruneImages()" style="margin-right:8px">清理过期</button><button onclick="loadImages()">刷新</button></div></div>
         <table><thead><tr><th>预览</th><th>文件名</th><th>大小</th><th>修改时间</th></tr></thead><tbody id="imagesBody"></tbody></table>
+      </div>
+    </div>
+    <div class="page" id="page-audit">
+      <div class="table-wrap">
+        <div class="toolbar"><h3>审计日志</h3><button onclick="loadAudit()">刷新</button></div>
+        <table><thead><tr><th>时间</th><th>事件</th><th>trace_id</th><th>详情</th></tr></thead><tbody id="auditBody"></tbody></table>
       </div>
     </div>
   </div>
@@ -245,7 +264,13 @@ async function loadImages(){const d=await api('/images');if(!d)return;const tb=d
   '<td>'+fmtTime(f.mtime)+'</td></tr>'}).join('')}
 function showImg(src){document.getElementById('modalImg').src=src;document.getElementById('imgModal').classList.add('show')}
 async function pruneImages(){const d=await api('/prune-images','POST');if(d)toast(d.message,'success');loadImages()}
-document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages()}});
+async function loadAudit(){const d=await api('/audit?limit=50');if(!d)return;const tb=document.getElementById('auditBody');if(!d.length){tb.innerHTML='<tr><td colspan="4" class="empty">暂无日志</td></tr>';return}tb.innerHTML=d.map(l=>{
+  const evtMap={callback_pass:'推送-通过',callback_risky:'推送-违规',callback_error:'推送-异常',ignored_event:'忽略事件'}
+  return '<tr><td>'+fmtTime(l.createdAt)+'</td>'+
+  '<td><span class="badge '+(l.event.includes('pass')?'pass':l.event.includes('risky')?'risky':'pending')+'">'+(evtMap[l.event]||l.event)+'</span></td>'+
+  '<td style="font-family:monospace;font-size:12px">'+(l.trace_id||'-')+'</td>'+
+  '<td>'+(l.detail||'-')+'</td></tr>'}).join('')}
+document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='audit')loadAudit()}});
 function init(){loadStats();setInterval(loadStats,5000)}
 if(TOKEN){fetch(BASE+'/stats',{headers:hdr()}).then(r=>{if(r.ok){showApp();init()}else doLogout()}).catch(()=>doLogout())}
 document.getElementById('tokenInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});

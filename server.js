@@ -1,5 +1,9 @@
 const express = require('express')
 const config = require('./src/config')
+const { init: initDb } = require('./src/db')
+
+// 初始化 SQLite 数据库
+initDb()
 
 const app = express()
 // 单层反向代理后取真实客户端 IP（用于限流），多级代理请调整为跳数
