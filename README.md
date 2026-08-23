@@ -108,6 +108,25 @@ docker compose up -d --build
 
 设置 `DEBUG=true` 后，服务端会打印每次请求的方法/路径/状态码/耗时/`trace_id`，以及消息推送的验签与解密详情，便于排查异步结果未返回的问题。
 
+## 管理后台
+
+访问 `https://你的域名/admin` 进入 Web 管理面板（需要 `ADMIN_TOKEN` 环境变量）。
+
+功能：
+- **概览**：系统运行状态、内存使用、检测统计、图片存储
+- **检测记录**：最近 50 条检测记录，含图片预览、状态徽章、trace_id
+- **图片管理**：已存储图片列表，支持手动清理过期文件
+
+登录方式：浏览器打开 `/admin`，输入管理令牌登录。支持 `?token=xxx` URL 参数直接访问。
+
+API 端点（均需 Bearer token 认证）：
+- `GET /admin/api/stats` — 系统统计
+- `GET /admin/api/checks` — 检测记录列表
+- `GET /admin/api/images` — 图片列表
+- `POST /admin/api/clear-store` — 清空结果存储
+- `POST /admin/api/prune-images` — 清理过期图片
+- `POST /admin/api/refresh-token` — 刷新 access_token
+
 ## 注意事项
 
 - 结果存储为**内存实现**（`src/result-store.js`，TTL 60 分钟），单实例运行；重启会丢失 pending 中的结果。

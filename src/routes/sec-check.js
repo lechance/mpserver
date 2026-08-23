@@ -90,7 +90,7 @@ router.post('/image', upload.single('media'), async (req, res) => {
     })
     if (data.errcode === 0 && data.trace_id) {
       const token = crypto.randomBytes(16).toString('hex')
-      resultStore.createPending(data.trace_id, token)
+      resultStore.createPending(data.trace_id, token, filename)
       if (config.debug) {
         console.log(`[debug] 图片已提交检测 trace_id=${data.trace_id} file=${filename}`)
       }

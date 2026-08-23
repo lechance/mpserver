@@ -28,6 +28,7 @@ app.get('/health', (req, res) => {
 })
 
 app.use('/media', express.static(config.uploadDir))
+app.use('/admin', require('./src/routes/admin'))
 app.use('/api/sec-check', require('./src/routes/sec-check'))
 app.use('/api/sec-check/callback', require('./src/routes/wx-callback'))
 
