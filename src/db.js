@@ -3,7 +3,8 @@ const fs = require('fs')
 const path = require('path')
 const config = require('./config')
 
-const DB_PATH = path.join(config.uploadDir, 'mpserver.db')
+const DB_DIR = path.join(config.uploadDir, '..', 'db')
+const DB_PATH = path.join(DB_DIR, 'mpserver.db')
 
 let db
 let dbPath = DB_PATH
@@ -14,6 +15,8 @@ let dbPath = DB_PATH
  */
 async function init() {
   const SQL = await initSqlJs()
+  // 确保 db 目录存在
+  if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true })
   try {
     if (fs.existsSync(dbPath)) {
       const buf = fs.readFileSync(dbPath)

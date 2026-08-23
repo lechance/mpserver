@@ -9,7 +9,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
 RUN addgroup -S app && adduser -S app -G app \
-    && mkdir -p /app/uploads && chown -R app:app /app/uploads
+    && mkdir -p /app/uploads /app/db && chown -R app:app /app/uploads /app/db
 USER app
 EXPOSE 3000
 CMD ["node", "server.js"]
