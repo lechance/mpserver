@@ -8,7 +8,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
-RUN addgroup -g 1000 app && adduser -u 1000 -G app -S app \
+RUN addgroup app && adduser -G app -S app \
     && mkdir -p /app/uploads /app/db && chown -R app:app /app/uploads /app/db
 USER app
 EXPOSE 3000
