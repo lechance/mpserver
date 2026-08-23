@@ -1,17 +1,31 @@
-const Database = require('better-sqlite3')
+const initSqlJs = require('sql.js')
+const fs = require('fs')
 const path = require('path')
 const config = require('./config')
 
 const DB_PATH = path.join(config.uploadDir, '..', 'mpserver.db')
 
 let db
+let dbPath = DB_PATH
 
-function init() {
-  db = new Database(DB_PATH)
-  db.pragma('journal_mode = WAL')
-  db.pragma('busy_timeout = 5000')
+/**
+ * 初始化 SQLite 数据库（sql.js，纯 JS 实现）
+ * 启动时从磁盘加载，写入后自动保存到磁盘
+ */
+async function init() {
+  const SQL = await initSqlJs()
+  try {
+    if (fs.existsSync(dbPath)) {
+      const buf = fs.readFileSync(dbPath)
+      db = new SQL.Database(buf)
+    } else {
+      db = new SQL.Database()
+    }
+  } catch {
+    db = new SQL.Database()
+  }
 
-  db.exec(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS checks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       trace_id TEXT UNIQUE NOT NULL,
@@ -21,30 +35,53 @@ function init() {
       code INTEGER,
       safe INTEGER,
       message TEXT,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
-      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_checks_created_at ON checks(created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_checks_status ON checks(status);
-
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `)
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_checks_created_at ON checks(created_at DESC)
+  `)
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_checks_status ON checks(status)
+  `)
+  db.run(`
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       event TEXT NOT NULL,
       trace_id TEXT,
       detail TEXT,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC);
+      created_at INTEGER NOT NULL
+    )
+  `)
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC)
   `)
 
+  save()
   return db
 }
 
+/**
+ * 保存数据库到磁盘
+ */
+function save() {
+  if (!db) return
+  try {
+    const data = db.export()
+    const buffer = Buffer.from(data)
+    fs.writeFileSync(dbPath, buffer)
+  } catch (e) {
+    console.error('[db] 保存数据库失败:', e.message)
+  }
+}
+
+/**
+ * 获取数据库实例
+ */
 function getDb() {
   if (!db) throw new Error('数据库未初始化，请先调用 init()')
   return db
 }
 
-module.exports = { init, getDb }
+module.exports = { init, getDb, save }
