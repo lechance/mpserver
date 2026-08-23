@@ -297,6 +297,7 @@ modalImg.addEventListener('touchstart',e=>{if(e.touches.length===1){const t=e.to
 modalImg.addEventListener('touchmove',e=>{if(e.touches.length===1){const t=e.touches[0];dragMove(t.clientX,t.clientY)}},{passive:true})
 modalImg.addEventListener('touchend',dragEnd)
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&imgModal.classList.contains('show'))closeImg()})
+imgModal.addEventListener('click',e=>{if(e.target===imgModal)closeImg()})
 async function pruneImages(){const d=await api('/prune-images','POST');if(d)toast(d.message,'success');loadImages()}
 async function loadAudit(){const d=await api('/audit?limit=50');if(!d)return;const tb=document.getElementById('auditBody');if(!d.length){tb.innerHTML='<tr><td colspan="4" class="empty">暂无日志</td></tr>';return}tb.innerHTML=d.map(l=>{
   const evtMap={callback_pass:'推送-通过',callback_risky:'推送-违规',callback_error:'推送-异常',ignored_event:'忽略事件'}
