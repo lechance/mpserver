@@ -3,7 +3,7 @@ const fs = require('fs')
 const path = require('path')
 const config = require('./config')
 
-const DB_PATH = path.join(config.uploadDir, '..', 'mpserver.db')
+const DB_PATH = path.join(config.uploadDir, 'mpserver.db')
 
 let db
 let dbPath = DB_PATH

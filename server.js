@@ -1,14 +1,14 @@
 const express = require('express')
 const config = require('./src/config')
 const { init: initDb } = require('./src/db')
-const cleanup = require('./src/cleanup')
+const { startCleanup } = require('./src/cleanup')
 
 const app = express()
 
 // 初始化 SQLite 数据库（sql.js，纯 JS 无需编译）
 initDb().then(() => {
   if (config.debug) console.log('[db] 数据库初始化完成')
-  cleanup.start()
+  startCleanup({ uploadDir: config.uploadDir })
 }).catch(e => {
   console.error('[db] 初始化失败:', e.message)
   process.exit(1)
