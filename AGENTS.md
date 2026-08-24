@@ -41,6 +41,16 @@ Responses always shape `{ code, safe }` when final (`safe=false` is a deliberate
 
 `GET /media/<file>` serves stored uploads to WeChat. WeChat must be able to download it over **HTTPS:443** with a valid cert (`PUBLIC_BASE_URL`), so localhost/LAN won't work for real checks.
 
+## User data sync (`/api/sync/*`, `src/routes/sync.js`)
+
+Session-level backup for the mini program: client pulls on launch, pushes on app-hide. Identity = fresh `wx.login` code per request exchanged via `code2Session` — the client never self-reports an openid, so there is no unauthenticated write path. Storage is the `user_data` SQLite table, unique on `(openid, scope, data_type)`; `scope` is a tool id or `_global`/`_profile`/`_sync`.
+
+- All three endpoints are rate-limited separately from sec-check (`SYNC_RATE_LIMIT_MAX`/`SYNC_RATE_LIMIT_WINDOW_MS`, default 30/min).
+- **Merge is last-write-wins by `updated_at`** — upsert has `WHERE excluded.updated_at > user_data.updated_at`, so a stale push never overwrites newer data. Client timestamps are trusted within a 60s skew window (`CLOCK_SKEW_MS`); rows with future timestamps beyond that are rejected 400.
+- Payload limits: ≤200 items/request, each `data` ≤100KB serialized, body limit 2mb on this router only. Validation runs **before** `code2Session` (fail fast, don't burn WeChat API quota on garbage).
+- Endpoints: `POST /pull {code}` → `{code:0, items:[{scope,data_type,data,updated_at}], server_time}`; `POST /push {code, items}` → `{code:0, applied, total}` (applied counts actually-changed rows via `getRowsModified`); `POST /delete {code, items:[{scope,data_type}]}` → `{code:0, deleted}`. Errors mirror sec-check semantics: 400 invalid code/fields, 429 rate-limited, 500 服务未配置， 502 登录服务异常.
+- The server is schema-dumb: `data` is an opaque JSON blob and row semantics live entirely client-side (`lifetools/src/utils/sync.js` owns hashing/change detection). Don't add server-side interpretation of tool payloads.
+
 ## WeChat message push (`/api/sec-check/callback`)
 
 Configured in MP console 开发管理 → 消息推送配置 (**安全模式**, JSON). The `wxa_media_check` result event arrives here; `src/wx-crypt.js` verifies `msg_signature` and AES-decrypts (`aes-256-cbc`, PKCS#7, Node `crypto` only), then `src/routes/wx-callback.js` maps `result.suggest` into the result store keyed by `trace_id`. The plaintext-mode POST fallback also verifies the URL `signature` — unauthenticated POSTs are rejected with 403.

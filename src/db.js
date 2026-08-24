@@ -60,6 +60,20 @@ async function init() {
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log(created_at DESC)
   `)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_data (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      openid TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      data_type TEXT NOT NULL,
+      data TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(openid, scope, data_type)
+    )
+  `)
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_user_data_openid ON user_data(openid)
+  `)
 
   save()
   return db

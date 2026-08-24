@@ -13,5 +13,7 @@ module.exports = {
   debug: (process.env.DEBUG || '').toLowerCase() === 'true' || process.env.DEBUG === '1',
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX) || 10,
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
+  syncRateLimitMax: Number(process.env.SYNC_RATE_LIMIT_MAX) || 30,
+  syncRateLimitWindowMs: Number(process.env.SYNC_RATE_LIMIT_WINDOW_MS) || 60 * 1000,
   adminToken: process.env.ADMIN_TOKEN || '',
 }

@@ -76,6 +76,16 @@ curl -F media=@test.png -F code=<wx.login code> http://localhost:3000/api/sec-ch
 
 `GET /media/<file>` — 提供给微信下载待检测图片（微信服务器通过 HTTPS 下载）。
 
+## 用户数据云同步
+
+小程序端会话级备份：启动拉取、退后台推送，冲突按 `updated_at` 最近写入优先合并。身份通过每请求携带的 `wx.login` code 换取 openid，不信任客户端自报身份。数据存 SQLite `user_data` 表（`(openid, scope, data_type)` 唯一），`data` 为不透明 JSON，行语义由小程序端定义。
+
+- `POST /api/sync/pull` — body `{ code }` → `{ code: 0, items: [{ scope, data_type, data, updated_at }], server_time }`
+- `POST /api/sync/push` — body `{ code, items: [{ scope, data_type, data, updated_at }] }` → `{ code: 0, applied, total }`
+- `POST /api/sync/delete` — body `{ code, items: [{ scope, data_type }] }` → `{ code: 0, deleted }`
+
+限制：单次 ≤200 条、单条 ≤100KB、body ≤2mb；独立限流 `SYNC_RATE_LIMIT_MAX`/`SYNC_RATE_LIMIT_WINDOW_MS`（默认 30 次/分钟）。错误语义与 sec-check 一致（400 code 无效 / 429 限流 / 500 未配置 / 502 登录服务异常）。
+
 ## 微信小程序接入
 
 小程序侧调用 `wx.login()` 获取 `code`，再 `wx.uploadFile` 上传图片并携带 `code`；拿到 `trace_id` 与 `token` 后轮询结果接口（携带 `token`），直到拿到 `safe`。
