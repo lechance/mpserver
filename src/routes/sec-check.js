@@ -6,7 +6,6 @@ const { mediaCheckAsync, code2Session } = require('../wx-client')
 const config = require('../config')
 const resultStore = require('../result-store')
 const { createLimiter } = require('../rate-limit')
-const { startCleanup } = require('../cleanup')
 
 const ALLOWED_MIME = {
   'image/png': { ext: 'png' },
@@ -29,7 +28,6 @@ function isValidImage(mimetype, buffer) {
 fs.mkdirSync(config.uploadDir, { recursive: true })
 
 const submitLimiter = createLimiter(config.rateLimitMax, config.rateLimitWindowMs)
-startCleanup({ uploadDir: config.uploadDir, limiters: [submitLimiter] })
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -136,5 +134,8 @@ router.get('/result', (req, res) => {
   }
   return res.json({ code: record.code, safe: record.safe, message: record.message })
 })
+
+// 限流器实例挂到 router 上，由 server.js 统一交给定时清理修剪
+router.submitLimiter = submitLimiter
 
 module.exports = router

@@ -189,4 +189,7 @@ router.post('/delete', async (req, res) => {
   }
 })
 
+// 限流器实例挂到 router 上，由 server.js 统一交给定时清理修剪
+router.syncLimiter = syncLimiter
+
 module.exports = router

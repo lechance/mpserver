@@ -10,7 +10,7 @@ WeChat mini-program backend for image content-security (`mediaCheckAsync`, async
 
 ## Environment
 
-- `src/config.js` runs `require('dotenv').config()` at load time and reads `APPID`, `APPSECRET`, `PORT`, `MAX_IMAGE_SIZE`, `PUBLIC_BASE_URL`, `WX_MSG_TOKEN`, `WX_MSG_ENCODING_AES_KEY`, `SEC_CHECK_SCENE`, `UPLOAD_DIR`, `DEBUG`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS`, `ADMIN_TOKEN`. `.env` is gitignored; only `.env.example` is committed.
+- `src/config.js` runs `require('dotenv').config()` at load time and reads `APPID`, `APPSECRET`, `PORT`, `MAX_IMAGE_SIZE`, `PUBLIC_BASE_URL`, `WX_MSG_TOKEN`, `WX_MSG_ENCODING_AES_KEY`, `SEC_CHECK_SCENE`, `UPLOAD_DIR`, `DEBUG`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS`, `SYNC_RATE_LIMIT_MAX`, `SYNC_RATE_LIMIT_WINDOW_MS`, `SUGGEST_RATE_LIMIT_MAX`, `SUGGEST_RATE_LIMIT_WINDOW_MS`, `ADMIN_TOKEN`. `.env` is gitignored; only `.env.example` is committed.
 - `DEBUG=true` enables verbose request logging middleware in `server.js` (method/path/status/duration/`trace_id`), submit success logs, and callback decrypt detail logs — useful for diagnosing async results that never arrive.
 - Submit is rate-limited per-IP (default 10/min via `src/rate-limit.js`); `server.js` sets `trust proxy` to 1 hop so `req.ip` works behind a single reverse proxy.
 - `APPID`/`APPSECRET`/`PUBLIC_BASE_URL` are required for real sec-check requests but **not** for `/health`. Without them, `POST /api/sec-check/image` returns 500 with `message: '服务未配置'`.
@@ -20,8 +20,8 @@ WeChat mini-program backend for image content-security (`mediaCheckAsync`, async
 ## Runtime quirks
 
 - Requires Node >= 18 (uses global `fetch`, `crypto`, `FormData`, `Blob` directly — no undici/node-fetch/crypto dep). Dockerfile builds on `node:24-alpine` and runs `npm ci`.
-- Deps are `express`, `multer`, `dotenv` only. Don't add packages for things Node globals already provide.
-- `src/result-store.js` keeps async results **in memory** keyed by `trace_id` (TTL 60min) — single-instance only; pending results are lost on restart. Uploaded files are auto-cleaned by `src/cleanup.js` (interval 10min, deletes images idle >24h); outbound WeChat fetches use `AbortController` timeouts via `src/http.js`.
+- Deps are `express`, `multer`, `dotenv`, `sql.js` only. Don't add packages for things Node globals already provide.
+- Storage is SQLite via `sql.js` (pure JS, no native build) persisted to `db/mpserver.db` — `src/db.js` loads at boot and does a synchronous `writeFileSync` export after every mutation. All three stores (`checks`, `audit_log`, `user_data`, plus `suggestions`) survive restarts. Rate-limiter Maps stay in memory; all of them (`submitLimiter`, `syncLimiter`, `suggestLimiter`) are wired into the single `startCleanup` call in `server.js` for periodic prune. Uploaded files are auto-cleaned by `src/cleanup.js` (interval 10min, deletes images idle >24h); outbound WeChat fetches use `AbortController` timeouts via `src/http.js`.
 
 ## API contract (async flow)
 
@@ -50,6 +50,10 @@ Session-level backup for the mini program: client pulls on launch, pushes on app
 - Payload limits: ≤200 items/request, each `data` ≤100KB serialized, body limit 2mb on this router only. Validation runs **before** `code2Session` (fail fast, don't burn WeChat API quota on garbage).
 - Endpoints: `POST /pull {code}` → `{code:0, items:[{scope,data_type,data,updated_at}], server_time}`; `POST /push {code, items}` → `{code:0, applied, total}` (applied counts actually-changed rows via `getRowsModified`); `POST /delete {code, items:[{scope,data_type}]}` → `{code:0, deleted}`. Errors mirror sec-check semantics: 400 invalid code/fields, 429 rate-limited, 500 服务未配置， 502 登录服务异常.
 - The server is schema-dumb: `data` is an opaque JSON blob and row semantics live entirely client-side (`lifetools/src/utils/sync.js` owns hashing/change detection). Don't add server-side interpretation of tool payloads.
+
+## Tool suggestions (`POST /api/suggestion`, `src/routes/suggestion.js`)
+
+Matches the mini program's 工具建议 page (`lifetools/src/pages/suggestion/index.vue`). Body: `{ type: 'improve'|'new', toolId?, toolName?, content, time? }` — client treats any 2xx as success. **No identity**: the client sends no `wx.login` code here, so there is no openid — protection is per-IP rate limiting only (`SUGGEST_RATE_LIMIT_MAX`/`SUGGEST_RATE_LIMIT_WINDOW_MS`, default 5/10min). Validation: `type` must be `improve|new`; `content` required, trimmed, ≤500 chars (matches client `maxlength`); `toolId`/`toolName` dropped if not short strings. Stored in the `suggestions` SQLite table; admin dashboard has a 用户建议 page (list + delete) and a count on the overview.
 
 ## WeChat message push (`/api/sec-check/callback`)
 

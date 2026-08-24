@@ -74,6 +74,19 @@ async function init() {
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_user_data_openid ON user_data(openid)
   `)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS suggestions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      tool_id TEXT DEFAULT '',
+      tool_name TEXT DEFAULT '',
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )
+  `)
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_suggestions_created_at ON suggestions(created_at DESC)
+  `)
 
   save()
   return db

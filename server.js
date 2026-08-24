@@ -5,10 +5,22 @@ const { startCleanup } = require('./src/cleanup')
 
 const app = express()
 
+// 各路由的限流器实例（统一交给定时清理修剪过期 key，防止 Map 无限增长）
+const secCheckRouter = require('./src/routes/sec-check')
+const syncRouter = require('./src/routes/sync')
+const suggestionRouter = require('./src/routes/suggestion')
+
 // 初始化 SQLite 数据库（sql.js，纯 JS 无需编译）
 initDb().then(() => {
   if (config.debug) console.log('[db] 数据库初始化完成')
-  startCleanup({ uploadDir: config.uploadDir })
+  startCleanup({
+    uploadDir: config.uploadDir,
+    limiters: [
+      secCheckRouter.submitLimiter,
+      syncRouter.syncLimiter,
+      suggestionRouter.suggestLimiter,
+    ],
+  })
 }).catch(e => {
   console.error('[db] 初始化失败:', e.message)
   process.exit(1)
@@ -40,9 +52,10 @@ app.get('/health', (req, res) => {
 
 app.use('/media', express.static(config.uploadDir))
 app.use('/admin', require('./src/routes/admin'))
-app.use('/api/sec-check', require('./src/routes/sec-check'))
+app.use('/api/sec-check', secCheckRouter)
 app.use('/api/sec-check/callback', require('./src/routes/wx-callback'))
-app.use('/api/sync', require('./src/routes/sync'))
+app.use('/api/sync', syncRouter)
+app.use('/api/suggestion', suggestionRouter)
 
 // 统一错误处理（multer 文件大小/类型等）
 app.use((err, req, res, next) => {

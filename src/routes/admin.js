@@ -5,6 +5,7 @@ const config = require('../config')
 const resultStore = require('../result-store')
 const { adminAuth } = require('../admin-auth')
 const { refreshAccessToken } = require('../access-token')
+const { getDb, save } = require('../db')
 
 const router = express.Router()
 
@@ -38,8 +39,22 @@ router.get('/api/stats', (req, res) => {
     },
     checks: stats,
     images: { count: imageCount, totalSize: imageTotalSize },
+    suggestions: getSuggestionCount(),
   })
 })
+
+/** 建议总数 */
+function getSuggestionCount() {
+  try {
+    const stmt = getDb().prepare('SELECT COUNT(*) AS n FROM suggestions')
+    stmt.step()
+    const n = stmt.getAsObject().n || 0
+    stmt.free()
+    return n
+  } catch {
+    return 0
+  }
+}
 
 router.get('/api/checks', (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 50, 200)
@@ -80,6 +95,39 @@ router.get('/api/images', (req, res) => {
   } catch {}
   files.sort((a, b) => b.mtime - a.mtime)
   res.json(files)
+})
+
+router.get('/api/suggestions', (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200)
+  const db = getDb()
+  const items = []
+  const stmt = db.prepare('SELECT id, type, tool_id, tool_name, content, created_at FROM suggestions ORDER BY created_at DESC LIMIT ?')
+  stmt.bind([limit])
+  while (stmt.step()) {
+    const r = stmt.getAsObject()
+    items.push({
+      id: r.id,
+      type: r.type,
+      toolId: r.tool_id,
+      toolName: r.tool_name,
+      content: r.content,
+      createdAt: r.created_at,
+    })
+  }
+  stmt.free()
+  res.json(items)
+})
+
+router.post('/api/suggestion-delete', (req, res) => {
+  const id = Number(req.body && req.body.id)
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ code: 400, message: 'id 无效' })
+  }
+  const db = getDb()
+  db.run('DELETE FROM suggestions WHERE id = ?', [id])
+  const count = db.getRowsModified()
+  save()
+  res.json({ code: 0, message: `已删除 ${count} 条建议` })
 })
 
 router.post('/api/clear-store', (req, res) => {
@@ -200,6 +248,7 @@ tr:hover{background:#f5f5f5}
       <a href="#" data-page="dashboard" class="active"><span class="icon">&#9632;</span><span>概览</span></a>
       <a href="#" data-page="checks"><span class="icon">&#9654;</span><span>检测记录</span></a>
       <a href="#" data-page="images"><span class="icon">&#9733;</span><span>图片管理</span></a>
+      <a href="#" data-page="suggestions"><span class="icon">&#9998;</span><span>用户建议</span></a>
       <a href="#" data-page="audit"><span class="icon">&#9783;</span><span>审计日志</span></a>
     </nav>
     <button class="logout" onclick="doLogout()">退出登录</button>
@@ -225,6 +274,12 @@ tr:hover{background:#f5f5f5}
       <div class="table-wrap">
         <div class="toolbar"><h3>审计日志</h3><button onclick="loadAudit()">刷新</button></div>
         <table><thead><tr><th>时间</th><th>事件</th><th>trace_id</th><th>详情</th></tr></thead><tbody id="auditBody"></tbody></table>
+      </div>
+    </div>
+    <div class="page" id="page-suggestions">
+      <div class="table-wrap">
+        <div class="toolbar"><h3>工具建议（来自小程序「工具建议」页）</h3><button onclick="loadSuggestions()">刷新</button></div>
+        <table><thead><tr><th>类型</th><th>相关工具</th><th>内容</th><th>时间</th><th>操作</th></tr></thead><tbody id="suggestionsBody"></tbody></table>
       </div>
     </div>
   </div>
@@ -262,6 +317,7 @@ async function loadStats(){const d=await api('/stats');if(!d)return;document.get
   <div class="stat-card"><div class="label">通过</div><div class="value green">\${d.checks.pass}</div></div>
   <div class="stat-card"><div class="label">违规</div><div class="value red">\${d.checks.risky}</div></div>
   <div class="stat-card"><div class="label">进行中</div><div class="value blue">\${d.checks.pending}</div></div>
+  <div class="stat-card"><div class="label">用户建议</div><div class="value">\${d.suggestions!=null?d.suggestions:'-'}</div></div>
   <div class="stat-card"><div class="label">图片存储</div><div class="value">\${d.images.count} 个 / \${fmtSize(d.images.totalSize)}</div></div>
 \`}
 async function loadChecks(){const d=await api('/checks?limit=50');if(!d)return;const tb=document.getElementById('checksBody');if(!d.length){tb.innerHTML='<tr><td colspan="4" class="empty">暂无记录</td></tr>';return}tb.innerHTML=d.map(r=>{
@@ -305,7 +361,16 @@ async function loadAudit(){const d=await api('/audit?limit=50');if(!d)return;con
   '<td><span class="badge '+(l.event.includes('pass')?'pass':l.event.includes('risky')?'risky':'pending')+'">'+(evtMap[l.event]||l.event)+'</span></td>'+
   '<td style="font-family:monospace;font-size:12px">'+(l.trace_id||'-')+'</td>'+
   '<td>'+(l.detail||'-')+'</td></tr>'}).join('')}
-document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='audit')loadAudit()}});
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+async function loadSuggestions(){const d=await api('/suggestions?limit=100');if(!d)return;const tb=document.getElementById('suggestionsBody');if(!d.length){tb.innerHTML='<tr><td colspan="5" class="empty">暂无建议</td></tr>';return}tb.innerHTML=d.map(s=>{
+  const t=s.type==='new'?'<span class="badge pass">新工具诉求</span>':'<span class="badge pending">现有工具建议</span>'
+  return '<tr><td>'+t+'</td>'+
+  '<td>'+esc(s.toolName||'-')+'</td>'+
+  '<td style="max-width:420px;white-space:pre-wrap;word-break:break-word">'+esc(s.content)+'</td>'+
+  '<td>'+fmtTime(s.createdAt)+'</td>'+
+  '<td><button onclick="deleteSuggestion('+Number(s.id)+')">删除</button></td></tr>'}).join('')}
+async function deleteSuggestion(id){if(!confirm('确定删除该条建议？'))return;const r=await fetch(BASE+'/suggestion-delete',{method:'POST',headers:hdr(),body:JSON.stringify({id})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSuggestions()}else{toast((d&&d.message)||'删除失败','error')}}
+document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='audit')loadAudit()}});
 function init(){loadStats();setInterval(loadStats,5000)}
 if(TOKEN){fetch(BASE+'/stats',{headers:hdr()}).then(r=>{if(r.ok){showApp();init()}else doLogout()}).catch(()=>doLogout())}
 document.getElementById('tokenInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
