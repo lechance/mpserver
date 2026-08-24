@@ -532,7 +532,7 @@ async function loadSyncUsers(){const d=await api('/sync-users');if(!d)return;con
   return '<tr><td style="font-family:monospace;font-size:12px">'+esc(u.openid)+'</td>'+
   '<td>'+u.entryCount+'</td>'+
   '<td>'+fmtTime(u.latestAt)+'</td>'+
-  '<td><button onclick="loadSyncDetail(\''+esc(u.openid)+'\')">查看</button></td></tr>'}).join('')}
+  '<td><button onclick="loadSyncDetail(\\''+esc(u.openid)+'\\')">查看</button></td></tr>'}).join('')}
 function backToSyncUsers(){document.getElementById('syncUsersView').style.display='';document.getElementById('syncDetailView').style.display='none';syncCurrentOpenid=''}
 async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syncCurrentOpenid)return;document.getElementById('syncUsersView').style.display='none';document.getElementById('syncDetailView').style.display='';document.getElementById('syncDetailTitle').textContent='用户数据 - '+syncCurrentOpenid.slice(0,12)+'...';const d=await api('/sync-data?openid='+encodeURIComponent(syncCurrentOpenid));if(!d)return;const tb=document.getElementById('syncDetailBody');if(!d.items||!d.items.length){tb.innerHTML='<tr><td colspan="5" class="empty">该用户暂无数据</td></tr>';return}tb.innerHTML=d.items.map(it=>{
   const preview=typeof it.data==='string'?it.data:JSON.stringify(it.data);const short=preview.length>80?preview.slice(0,80)+'\u2026':preview
@@ -540,7 +540,7 @@ async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syn
   '<td style="font-family:monospace;font-size:12px">'+esc(it.dataType)+'</td>'+
   '<td class="data-preview" title="'+esc(preview)+'">'+esc(short)+'</td>'+
   '<td>'+fmtTime(it.updatedAt)+'</td>'+
-  '<td><button onclick="syncDeleteItem(\''+esc(it.scope)+'\',\''+esc(it.dataType)+'\')" class="btn-danger" style="padding:4px 10px;font-size:12px">删除</button></td></tr>'}).join('')}
+  '<td><button onclick="syncDeleteItem(\\''+esc(it.scope)+'\\',\\''+esc(it.dataType)+'\\')" class="btn-danger" style="padding:4px 10px;font-size:12px">删除</button></td></tr>'}).join('')}
 async function syncDeleteItem(scope,dataType){if(!confirm('确定删除 '+scope+'/'+dataType+'？'))return;const r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope,data_type:dataType})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSyncDetail()}else{toast((d&&d.message)||'删除失败','error')}}
 document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='syncdata'){backToSyncUsers();loadSyncUsers()}if(a.dataset.page==='audit')loadAudit()}});
 function init(){loadStats();setInterval(loadStats,5000)}
