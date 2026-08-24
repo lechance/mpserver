@@ -55,6 +55,14 @@ Session-level backup for the mini program: client pulls on launch, pushes on app
 
 Matches the mini program's 工具建议 page (`lifetools/src/pages/suggestion/index.vue`). Body: `{ type: 'improve'|'new', toolId?, toolName?, content, time? }` — client treats any 2xx as success. **No identity**: the client sends no `wx.login` code here, so there is no openid — protection is per-IP rate limiting only (`SUGGEST_RATE_LIMIT_MAX`/`SUGGEST_RATE_LIMIT_WINDOW_MS`, default 5/10min). Validation: `type` must be `improve|new`; `content` required, trimmed, ≤500 chars (matches client `maxlength`); `toolId`/`toolName` dropped if not short strings. Stored in the `suggestions` SQLite table; admin dashboard has a 用户建议 page (list + delete) and a count on the overview.
 
+## Admin dashboard — sync data viewing (`/admin/api/sync-*`)
+
+The admin dashboard has a 同步数据 page for inspecting user cloud-synced data in the `user_data` table. Endpoints (all require `ADMIN_TOKEN`):
+
+- `GET /admin/api/sync-users` → `[{openid, entryCount, latestAt}]` — grouped by openid, ordered by latest sync time.
+- `GET /admin/api/sync-data?openid=xxx` → `{openid, items[{scope, dataType, data, updatedAt}]}` — all entries for a user, `data` is parsed JSON.
+- `POST /admin/api/sync-delete` body `{openid, scope, data_type}` → `{code:0, deleted:N}` — deletes a single entry.
+
 ## WeChat message push (`/api/sec-check/callback`)
 
 Configured in MP console 开发管理 → 消息推送配置 (**安全模式**, JSON). The `wxa_media_check` result event arrives here; `src/wx-crypt.js` verifies `msg_signature` and AES-decrypts (`aes-256-cbc`, PKCS#7, Node `crypto` only), then `src/routes/wx-callback.js` maps `result.suggest` into the result store keyed by `trace_id`. The plaintext-mode POST fallback also verifies the URL `signature` — unauthenticated POSTs are rejected with 403.

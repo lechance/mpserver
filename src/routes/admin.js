@@ -187,6 +187,64 @@ router.post('/api/delete-images', (req, res) => {
   res.json({ code: 0, deleted, failed, message: parts.join('，') })
 })
 
+router.get('/api/sync-users', (req, res) => {
+  const db = getDb()
+  const users = []
+  const stmt = db.prepare(
+    'SELECT openid, COUNT(*) AS entryCount, MAX(updated_at) AS latestAt FROM user_data GROUP BY openid ORDER BY latestAt DESC'
+  )
+  while (stmt.step()) {
+    const r = stmt.getAsObject()
+    users.push({
+      openid: r.openid,
+      entryCount: r.entryCount,
+      latestAt: r.latestAt,
+    })
+  }
+  stmt.free()
+  res.json(users)
+})
+
+router.get('/api/sync-data', (req, res) => {
+  const openid = req.query.openid
+  if (!openid || typeof openid !== 'string') {
+    return res.status(400).json({ code: 400, message: '缺少 openid 参数' })
+  }
+  const db = getDb()
+  const items = []
+  const stmt = db.prepare(
+    'SELECT scope, data_type, data, updated_at FROM user_data WHERE openid = ? ORDER BY scope, data_type'
+  )
+  stmt.bind([openid])
+  while (stmt.step()) {
+    const r = stmt.getAsObject()
+    let parsed
+    try { parsed = JSON.parse(r.data) } catch { parsed = r.data }
+    items.push({
+      scope: r.scope,
+      dataType: r.data_type,
+      data: parsed,
+      updatedAt: r.updated_at,
+    })
+  }
+  stmt.free()
+  res.json({ openid, items })
+})
+
+router.post('/api/sync-delete', (req, res) => {
+  const openid = req.body && req.body.openid
+  const scope = req.body && req.body.scope
+  const dataType = req.body && req.body.data_type
+  if (!openid || !scope || !dataType) {
+    return res.status(400).json({ code: 400, message: '缺少 openid/scope/data_type' })
+  }
+  const db = getDb()
+  db.run('DELETE FROM user_data WHERE openid = ? AND scope = ? AND data_type = ?', [openid, scope, dataType])
+  const count = db.getRowsModified()
+  save()
+  res.json({ code: 0, deleted: count, message: count ? `已删除 ${count} 条记录` : '未找到匹配记录' })
+})
+
 router.post('/api/refresh-token', async (req, res) => {
   try {
     await refreshAccessToken()
@@ -242,6 +300,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 .table-wrap .toolbar button.btn-danger{border-color:#ffccc7;color:#ff4d4f;background:#fff2f0}
 .table-wrap .toolbar button.btn-danger:hover{border-color:#ff4d4f;background:#ff4d4f;color:#fff}
 table img-check{width:16px;height:16px;cursor:pointer}
+.data-preview{max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:monospace;font-size:12px;color:#595959}
 table{width:100%;border-collapse:collapse}
 th,td{padding:12px 16px;text-align:left;border-bottom:1px solid #f0f0f0;font-size:13px}
 th{background:#fafafa;font-weight:600;color:#595959}
@@ -285,6 +344,7 @@ tr:hover{background:#f5f5f5}
       <a href="#" data-page="checks"><span class="icon">&#9654;</span><span>检测记录</span></a>
       <a href="#" data-page="images"><span class="icon">&#9733;</span><span>图片管理</span></a>
       <a href="#" data-page="suggestions"><span class="icon">&#9998;</span><span>用户建议</span></a>
+      <a href="#" data-page="syncdata"><span class="icon">&#8644;</span><span>同步数据</span></a>
       <a href="#" data-page="audit"><span class="icon">&#9783;</span><span>审计日志</span></a>
     </nav>
     <button class="logout" onclick="doLogout()">退出登录</button>
@@ -316,6 +376,20 @@ tr:hover{background:#f5f5f5}
       <div class="table-wrap">
         <div class="toolbar"><h3>工具建议（来自小程序「工具建议」页）</h3><button onclick="loadSuggestions()">刷新</button></div>
         <table><thead><tr><th>类型</th><th>相关工具</th><th>内容</th><th>时间</th><th>操作</th></tr></thead><tbody id="suggestionsBody"></tbody></table>
+      </div>
+    </div>
+    <div class="page" id="page-syncdata">
+      <div id="syncUsersView">
+        <div class="table-wrap">
+          <div class="toolbar"><h3>已同步用户（按 openid 聚合）</h3><button onclick="loadSyncUsers()">刷新</button></div>
+          <table><thead><tr><th>openid</th><th>数据条数</th><th>最近同步</th><th>操作</th></tr></thead><tbody id="syncUsersBody"></tbody></table>
+        </div>
+      </div>
+      <div id="syncDetailView" style="display:none">
+        <div class="table-wrap">
+          <div class="toolbar"><h3 id="syncDetailTitle">用户数据</h3><button onclick="backToSyncUsers()" style="margin-right:8px">返回</button><button onclick="loadSyncDetail()">刷新</button></div>
+          <table><thead><tr><th>scope</th><th>data_type</th><th>数据预览</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="syncDetailBody"></tbody></table>
+        </div>
       </div>
     </div>
   </div>
@@ -410,7 +484,22 @@ async function loadSuggestions(){const d=await api('/suggestions?limit=100');if(
   '<td>'+fmtTime(s.createdAt)+'</td>'+
   '<td><button onclick="deleteSuggestion('+Number(s.id)+')">删除</button></td></tr>'}).join('')}
 async function deleteSuggestion(id){if(!confirm('确定删除该条建议？'))return;const r=await fetch(BASE+'/suggestion-delete',{method:'POST',headers:hdr(),body:JSON.stringify({id})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSuggestions()}else{toast((d&&d.message)||'删除失败','error')}}
-document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='audit')loadAudit()}});
+let syncCurrentOpenid=''
+async function loadSyncUsers(){const d=await api('/sync-users');if(!d)return;const tb=document.getElementById('syncUsersBody');if(!d.length){tb.innerHTML='<tr><td colspan="4" class="empty">暂无同步数据</td></tr>';return}tb.innerHTML=d.map(u=>{
+  return '<tr><td style="font-family:monospace;font-size:12px">'+esc(u.openid)+'</td>'+
+  '<td>'+u.entryCount+'</td>'+
+  '<td>'+fmtTime(u.latestAt)+'</td>'+
+  '<td><button onclick="loadSyncDetail(\''+esc(u.openid)+'\')">查看</button></td></tr>'}).join('')}
+function backToSyncUsers(){document.getElementById('syncUsersView').style.display='';document.getElementById('syncDetailView').style.display='none';syncCurrentOpenid=''}
+async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syncCurrentOpenid)return;document.getElementById('syncUsersView').style.display='none';document.getElementById('syncDetailView').style.display='';document.getElementById('syncDetailTitle').textContent='用户数据 - '+syncCurrentOpenid.slice(0,12)+'...';const d=await api('/sync-data?openid='+encodeURIComponent(syncCurrentOpenid));if(!d)return;const tb=document.getElementById('syncDetailBody');if(!d.items||!d.items.length){tb.innerHTML='<tr><td colspan="5" class="empty">该用户暂无数据</td></tr>';return}tb.innerHTML=d.items.map(it=>{
+  const preview=typeof it.data==='string'?it.data:JSON.stringify(it.data);const short=preview.length>80?preview.slice(0,80)+'\u2026':preview
+  return '<tr><td><span class="badge pending">'+esc(it.scope)+'</span></td>'+
+  '<td style="font-family:monospace;font-size:12px">'+esc(it.dataType)+'</td>'+
+  '<td class="data-preview" title="'+esc(preview)+'">'+esc(short)+'</td>'+
+  '<td>'+fmtTime(it.updatedAt)+'</td>'+
+  '<td><button onclick="syncDeleteItem(\''+esc(it.scope)+'\',\''+esc(it.dataType)+'\')" class="btn-danger" style="padding:4px 10px;font-size:12px">删除</button></td></tr>'}).join('')}
+async function syncDeleteItem(scope,dataType){if(!confirm('确定删除 '+scope+'/'+dataType+'？'))return;const r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope,data_type:dataType})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSyncDetail()}else{toast((d&&d.message)||'删除失败','error')}}
+document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='syncdata'){backToSyncUsers();loadSyncUsers()}if(a.dataset.page==='audit')loadAudit()}});
 function init(){loadStats();setInterval(loadStats,5000)}
 if(TOKEN){fetch(BASE+'/stats',{headers:hdr()}).then(r=>{if(r.ok){showApp();init()}else doLogout()}).catch(()=>doLogout())}
 document.getElementById('tokenInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
