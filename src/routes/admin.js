@@ -6,9 +6,51 @@ const resultStore = require('../result-store')
 const { adminAuth } = require('../admin-auth')
 const { refreshAccessToken } = require('../access-token')
 const { getDb, save } = require('../db')
+const { createLimiter } = require('../rate-limit')
 
 const router = express.Router()
 
+/** 管理后台登录限流（per IP） */
+const loginLimiter = createLimiter(config.adminRateLimitMax, config.adminRateLimitWindowMs)
+
+/**
+ * 管理后台登录（无需认证 — 这就是认证端点）
+ * POST /admin/api/login  body: { token }
+ * 成功 → { code: 0 }，失败 → 401
+ * 写入 audit_log 供审计追踪
+ */
+router.post('/api/login', (req, res) => {
+  if (!config.adminToken) {
+    return res.status(401).json({ code: 401, message: '管理令牌未配置' })
+  }
+  if (!loginLimiter(req.ip)) {
+    return res.status(429).json({ code: 429, message: '登录尝试过于频繁，请稍后再试' })
+  }
+  const token = req.body && req.body.token
+  if (token === config.adminToken) {
+    try {
+      const db = getDb()
+      db.run(
+        'INSERT INTO audit_log (event, trace_id, detail, created_at) VALUES (?, ?, ?, ?)',
+        ['admin_login', null, `ip=${req.ip}`, Date.now()]
+      )
+      save()
+    } catch {}
+    return res.json({ code: 0 })
+  }
+  // 失败也记录（含 IP，便于排查暴力破解）
+  try {
+    const db = getDb()
+    db.run(
+      'INSERT INTO audit_log (event, trace_id, detail, created_at) VALUES (?, ?, ?, ?)',
+      ['admin_login_fail', null, `ip=${req.ip}`, Date.now()]
+    )
+    save()
+  } catch {}
+  res.status(401).json({ code: 401, message: '管理令牌无效' })
+})
+
+// 以下所有路由需要管理令牌认证
 router.use(adminAuth)
 
 router.get('/api/stats', (req, res) => {
@@ -414,7 +456,7 @@ const hdr=()=>({'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json
 function toast(msg,type='info'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.classList.remove('show'),3000)}
 function showLogin(){document.getElementById('loginWrap').style.display='flex';document.getElementById('appWrap').style.display='none'}
 function showApp(){document.getElementById('loginWrap').style.display='none';document.getElementById('appWrap').style.display='flex'}
-function doLogin(){const t=document.getElementById('tokenInput').value.trim();if(!t)return;TOKEN=t;fetch(BASE+'/stats',{headers:hdr()}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(()=>{sessionStorage.setItem('admin_token',TOKEN);showApp();init()}).catch(()=>{document.getElementById('loginErr').textContent='令牌无效';document.getElementById('loginErr').style.display='block'})}
+function doLogin(){const t=document.getElementById('tokenInput').value.trim();if(!t)return;TOKEN=t;fetch(BASE+'/login',{method:'POST',headers:hdr(),body:JSON.stringify({token:t})}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(()=>{sessionStorage.setItem('admin_token',TOKEN);showApp();init()}).catch(()=>{document.getElementById('loginErr').textContent='令牌无效';document.getElementById('loginErr').style.display='block'})}
 function doLogout(){TOKEN='';sessionStorage.removeItem('admin_token');showLogin()}
 async function api(path,method='GET'){const r=await fetch(BASE+path,{method,headers:hdr()});if(r.status===401){doLogout();return null}return r.json()}
 function fmtSize(b){if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(1)+'MB'}
@@ -507,4 +549,4 @@ document.getElementById('tokenInput').addEventListener('keydown',e=>{if(e.key===
 </body>
 </html>`
 
-module.exports = router
+module.exports = { router, loginLimiter }

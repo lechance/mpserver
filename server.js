@@ -10,6 +10,8 @@ const secCheckRouter = require('./src/routes/sec-check')
 const syncRouter = require('./src/routes/sync')
 const suggestionRouter = require('./src/routes/suggestion')
 
+const { router: adminRouter, loginLimiter } = require('./src/routes/admin')
+
 // 初始化 SQLite 数据库（sql.js，纯 JS 无需编译）
 initDb().then(() => {
   if (config.debug) console.log('[db] 数据库初始化完成')
@@ -18,6 +20,7 @@ initDb().then(() => {
       secCheckRouter.submitLimiter,
       syncRouter.syncLimiter,
       suggestionRouter.suggestLimiter,
+      loginLimiter,
     ],
   })
 }).catch(e => {
@@ -50,7 +53,7 @@ app.get('/health', (req, res) => {
 })
 
 app.use('/media', express.static(config.uploadDir))
-app.use('/admin', require('./src/routes/admin'))
+app.use('/admin', adminRouter)
 app.use('/api/sec-check', secCheckRouter)
 app.use('/api/sec-check/callback', require('./src/routes/wx-callback'))
 app.use('/api/sync', syncRouter)

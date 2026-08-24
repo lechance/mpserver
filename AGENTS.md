@@ -10,7 +10,7 @@ WeChat mini-program backend for image content-security (`mediaCheckAsync`, async
 
 ## Environment
 
-- `src/config.js` runs `require('dotenv').config()` at load time and reads `APPID`, `APPSECRET`, `PORT`, `MAX_IMAGE_SIZE`, `PUBLIC_BASE_URL`, `WX_MSG_TOKEN`, `WX_MSG_ENCODING_AES_KEY`, `SEC_CHECK_SCENE`, `UPLOAD_DIR`, `DEBUG`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS`, `SYNC_RATE_LIMIT_MAX`, `SYNC_RATE_LIMIT_WINDOW_MS`, `SUGGEST_RATE_LIMIT_MAX`, `SUGGEST_RATE_LIMIT_WINDOW_MS`, `ADMIN_TOKEN`. `.env` is gitignored; only `.env.example` is committed.
+- `src/config.js` runs `require('dotenv').config()` at load time and reads `APPID`, `APPSECRET`, `PORT`, `MAX_IMAGE_SIZE`, `PUBLIC_BASE_URL`, `WX_MSG_TOKEN`, `WX_MSG_ENCODING_AES_KEY`, `SEC_CHECK_SCENE`, `UPLOAD_DIR`, `DEBUG`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS`, `SYNC_RATE_LIMIT_MAX`, `SYNC_RATE_LIMIT_WINDOW_MS`, `SUGGEST_RATE_LIMIT_MAX`, `SUGGEST_RATE_LIMIT_WINDOW_MS`, `ADMIN_RATE_LIMIT_MAX`, `ADMIN_RATE_LIMIT_WINDOW_MS`, `ADMIN_TOKEN`. `.env` is gitignored; only `.env.example` is committed.
 - `DEBUG=true` enables verbose request logging middleware in `server.js` (method/path/status/duration/`trace_id`), submit success logs, and callback decrypt detail logs — useful for diagnosing async results that never arrive.
 - Submit is rate-limited per-IP (default 10/min via `src/rate-limit.js`); `server.js` sets `trust proxy` to 1 hop so `req.ip` works behind a single reverse proxy.
 - `APPID`/`APPSECRET`/`PUBLIC_BASE_URL` are required for real sec-check requests but **not** for `/health`. Without them, `POST /api/sec-check/image` returns 500 with `message: '服务未配置'`.
@@ -21,7 +21,7 @@ WeChat mini-program backend for image content-security (`mediaCheckAsync`, async
 
 - Requires Node >= 18 (uses global `fetch`, `crypto`, `FormData`, `Blob` directly — no undici/node-fetch/crypto dep). Dockerfile builds on `node:24-alpine` and runs `npm ci`.
 - Deps are `express`, `multer`, `dotenv`, `sql.js` only. Don't add packages for things Node globals already provide.
-- Storage is SQLite via `sql.js` (pure JS, no native build) persisted to `db/mpserver.db` — `src/db.js` loads at boot and does a synchronous `writeFileSync` export after every mutation. All three stores (`checks`, `audit_log`, `user_data`, plus `suggestions`) survive restarts. Rate-limiter Maps stay in memory; all of them (`submitLimiter`, `syncLimiter`, `suggestLimiter`) are wired into the single `startCleanup` call in `server.js` for periodic prune. Uploaded files are auto-cleaned by `src/cleanup.js` (interval 10min, deletes images idle >24h); outbound WeChat fetches use `AbortController` timeouts via `src/http.js`.
+- Storage is SQLite via `sql.js` (pure JS, no native build) persisted to `db/mpserver.db` — `src/db.js` loads at boot and does a synchronous `writeFileSync` export after every mutation. All three stores (`checks`, `audit_log`, `user_data`, plus `suggestions`) survive restarts. Rate-limiter Maps stay in memory; all of them (`submitLimiter`, `syncLimiter`, `suggestLimiter`, `loginLimiter`) are wired into the single `startCleanup` call in `server.js` for periodic prune. Uploaded files are no longer auto-cleaned (manual via admin dashboard); outbound WeChat fetches use `AbortController` timeouts via `src/http.js`.
 
 ## API contract (async flow)
 
@@ -59,6 +59,7 @@ Matches the mini program's 工具建议 page (`lifetools/src/pages/suggestion/in
 
 The admin dashboard has a 同步数据 page for inspecting user cloud-synced data in the `user_data` table. Endpoints (all require `ADMIN_TOKEN`):
 
+- `POST /admin/api/login` body `{ token }` → `{code:0}` — login endpoint (no prior auth needed). Rate-limited per IP (`ADMIN_RATE_LIMIT_MAX`/`ADMIN_RATE_LIMIT_WINDOW_MS`, default 5/15min). Logs success/failure to `audit_log` as `admin_login`/`admin_login_fail`.
 - `GET /admin/api/sync-users` → `[{openid, entryCount, latestAt}]` — grouped by openid, ordered by latest sync time.
 - `GET /admin/api/sync-data?openid=xxx` → `{openid, items[{scope, dataType, data, updatedAt}]}` — all entries for a user, `data` is parsed JSON.
 - `POST /admin/api/sync-delete` body `{openid, scope, data_type}` → `{code:0, deleted:N}` — deletes a single entry.

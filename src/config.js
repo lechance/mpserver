@@ -17,5 +17,7 @@ module.exports = {
   syncRateLimitWindowMs: Number(process.env.SYNC_RATE_LIMIT_WINDOW_MS) || 60 * 1000,
   suggestRateLimitMax: Number(process.env.SUGGEST_RATE_LIMIT_MAX) || 5,
   suggestRateLimitWindowMs: Number(process.env.SUGGEST_RATE_LIMIT_WINDOW_MS) || 10 * 60 * 1000,
+  adminRateLimitMax: Number(process.env.ADMIN_RATE_LIMIT_MAX) || 5,
+  adminRateLimitWindowMs: Number(process.env.ADMIN_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
   adminToken: process.env.ADMIN_TOKEN || '',
 }
