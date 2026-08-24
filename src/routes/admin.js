@@ -50,6 +50,11 @@ router.post('/api/login', (req, res) => {
   res.status(401).json({ code: 401, message: '管理令牌无效' })
 })
 
+/** 管理后台页面（无需认证 — 页面自带登录表单） */
+router.get('/', (req, res) => {
+  res.type('html').send(DASHBOARD_HTML)
+})
+
 // 以下所有路由需要管理令牌认证
 router.use(adminAuth)
 
@@ -294,10 +299,6 @@ router.post('/api/refresh-token', async (req, res) => {
   } catch (e) {
     res.status(500).json({ code: 500, message: e.message })
   }
-})
-
-router.get('/', (req, res) => {
-  res.type('html').send(DASHBOARD_HTML)
 })
 
 const DASHBOARD_HTML = `<!DOCTYPE html>
