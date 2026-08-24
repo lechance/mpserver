@@ -154,6 +154,39 @@ router.post('/api/prune-images', (req, res) => {
   res.json({ code: 0, message: `已清理 ${removed} 个过期文件` })
 })
 
+router.post('/api/delete-images', (req, res) => {
+  const names = Array.isArray(req.body && req.body.filenames) ? req.body.filenames : []
+  if (!names.length) {
+    return res.status(400).json({ code: 400, message: 'filenames 不能为空' })
+  }
+  if (names.length > 500) {
+    return res.status(413).json({ code: 413, message: '单次删除数量过多' })
+  }
+  let deleted = 0
+  let failed = 0
+  for (const name of names) {
+    // 仅允许纯文件名（服务端生成的 UUID.ext），阻断路径穿越
+    if (typeof name !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(name) || name.includes('..')) {
+      failed++
+      continue
+    }
+    try {
+      const file = path.join(config.uploadDir, name)
+      if (fs.existsSync(file) && fs.statSync(file).isFile()) {
+        fs.unlinkSync(file)
+        deleted++
+      } else {
+        failed++
+      }
+    } catch {
+      failed++
+    }
+  }
+  const parts = [`已删除 ${deleted} 个文件`]
+  if (failed > 0) parts.push(`${failed} 个失败`)
+  res.json({ code: 0, deleted, failed, message: parts.join('，') })
+})
+
 router.post('/api/refresh-token', async (req, res) => {
   try {
     await refreshAccessToken()
@@ -206,6 +239,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hira
 .table-wrap .toolbar h3{font-size:15px}
 .table-wrap .toolbar button{padding:6px 16px;border:1px solid #d9d9d9;border-radius:6px;background:#fff;cursor:pointer;font-size:13px;transition:all .2s}
 .table-wrap .toolbar button:hover{border-color:#667eea;color:#667eea}
+.table-wrap .toolbar button.btn-danger{border-color:#ffccc7;color:#ff4d4f;background:#fff2f0}
+.table-wrap .toolbar button.btn-danger:hover{border-color:#ff4d4f;background:#ff4d4f;color:#fff}
+table img-check{width:16px;height:16px;cursor:pointer}
 table{width:100%;border-collapse:collapse}
 th,td{padding:12px 16px;text-align:left;border-bottom:1px solid #f0f0f0;font-size:13px}
 th{background:#fafafa;font-weight:600;color:#595959}
@@ -266,8 +302,8 @@ tr:hover{background:#f5f5f5}
     </div>
     <div class="page" id="page-images">
       <div class="table-wrap">
-        <div class="toolbar"><h3>已存储图片</h3><div><button onclick="pruneImages()" style="margin-right:8px">清理过期</button><button onclick="loadImages()">刷新</button></div></div>
-        <table><thead><tr><th>预览</th><th>文件名</th><th>大小</th><th>修改时间</th></tr></thead><tbody id="imagesBody"></tbody></table>
+        <div class="toolbar"><h3>已存储图片</h3><div><button onclick="deleteSelectedImages()" class="btn-danger" style="margin-right:8px">删除选中</button><button onclick="loadImages()">刷新</button></div></div>
+        <table><thead><tr><th style="width:40px"><input type="checkbox" id="imgCheckAll" onchange="toggleAllImg(this)"></th><th>预览</th><th>文件名</th><th>大小</th><th>修改时间</th></tr></thead><tbody id="imagesBody"></tbody></table>
       </div>
     </div>
     <div class="page" id="page-audit">
@@ -328,11 +364,15 @@ async function loadChecks(){const d=await api('/checks?limit=50');if(!d)return;c
   '<td><span class="badge '+s+'">'+l+'</span></td>'+
   '<td style="font-family:monospace;font-size:12px">'+r.trace_id+'</td>'+
   '<td>'+fmtTime(r.createdAt)+'</td></tr>'}).join('')}
-async function loadImages(){const d=await api('/images');if(!d)return;const tb=document.getElementById('imagesBody');if(!d.length){tb.innerHTML='<tr><td colspan="4" class="empty">暂无图片</td></tr>';return}tb.innerHTML=d.map(f=>{
-  return '<tr><td><img class="thumb" src="/media/'+f.name+'" onclick="showImg(\\''+'/media/'+f.name+'\\')"></td>'+
+async function loadImages(){const d=await api('/images');if(!d)return;const tb=document.getElementById('imagesBody');if(!d.length){tb.innerHTML='<tr><td colspan="5" class="empty">暂无图片</td></tr>';return}document.getElementById('imgCheckAll').checked=false;tb.innerHTML=d.map(f=>{
+  return '<tr><td><input type="checkbox" class="img-check" data-name="'+esc(f.name)+'"></td>'+
+  '<td><img class="thumb" src="/media/'+f.name+'" onclick="showImg(\\''+'/media/'+f.name+'\\')"></td>'+
   '<td style="font-family:monospace;font-size:12px">'+f.name+'</td>'+
   '<td>'+fmtSize(f.size)+'</td>'+
   '<td>'+fmtTime(f.mtime)+'</td></tr>'}).join('')}
+function toggleAllImg(el){document.querySelectorAll('.img-check').forEach(cb=>{cb.checked=el.checked})}
+function getSelectedImages(){return Array.from(document.querySelectorAll('.img-check:checked')).map(cb=>cb.dataset.name)}
+async function deleteSelectedImages(){const names=getSelectedImages();if(!names.length){toast('请先勾选要删除的图片','info');return}if(!confirm('确定删除选中的 '+names.length+' 张图片？'))return;const r=await fetch(BASE+'/delete-images',{method:'POST',headers:hdr(),body:JSON.stringify({filenames:names})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadImages()}else{toast((d&&d.message)||'删除失败','error')}}
 const modalImg=document.getElementById('modalImg'),imgModal=document.getElementById('imgModal')
 let zScale=1,zX=0,zY=0
 function applyZoom(){modalImg.style.transform='translate('+zX+'px,'+zY+'px) scale('+zScale+')';document.getElementById('zoomLevel').textContent=Math.round(zScale*100)+'%'}

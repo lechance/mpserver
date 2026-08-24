@@ -14,7 +14,6 @@ const suggestionRouter = require('./src/routes/suggestion')
 initDb().then(() => {
   if (config.debug) console.log('[db] 数据库初始化完成')
   startCleanup({
-    uploadDir: config.uploadDir,
     limiters: [
       secCheckRouter.submitLimiter,
       syncRouter.syncLimiter,
