@@ -390,6 +390,14 @@ tr:hover{background:#f5f5f5}
 .zoom-bar button{min-width:34px;height:34px;padding:0 8px;background:transparent;color:#fff;border:none;border-radius:6px;font-size:16px;cursor:pointer}
 .zoom-bar button:hover{background:rgba(255,255,255,.2)}
 .zoom-bar .zlevel{color:#fff;font-size:13px;min-width:52px;text-align:center}
+.data-modal{position:relative;width:80vw;max-width:800px;max-height:85vh;background:#fff;border-radius:12px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.data-modal .dm-header{padding:16px 20px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.data-modal .dm-header .dm-title{font-size:15px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.data-modal .dm-header .dm-time{font-size:12px;color:#8c8c8c}
+.data-modal .dm-body{flex:1;overflow:auto;padding:16px 20px}
+.data-modal .dm-body pre{margin:0;font-family:'SF Mono',Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-all;color:#333}
+.data-modal .close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.06);color:#666;border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1}
+.data-modal .close:hover{background:rgba(0,0,0,.12)}
 .toast{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:8px;color:#fff;font-size:14px;z-index:2000;opacity:0;transition:opacity .3s}
 .toast.show{opacity:1}.toast.success{background:#52c41a}.toast.error{background:#ff4d4f}.toast.info{background:#1890ff}
 @media(max-width:768px){.sidebar{width:60px}.sidebar .logo small,.sidebar nav a span{display:none}.sidebar nav a{justify-content:center;padding:12px}.sidebar .logo{font-size:14px;padding:0 0 12px;text-align:center}.main{margin-left:60px}}
@@ -474,6 +482,17 @@ tr:hover{background:#f5f5f5}
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="dataModal">
+  <div class="data-modal">
+    <button class="close" onclick="closeDataModal()">&times;</button>
+    <div class="dm-header">
+      <span class="badge pending" id="dmScope"></span>
+      <span class="dm-title" id="dmDataType"></span>
+      <span class="dm-time" id="dmTime"></span>
+    </div>
+    <div class="dm-body"><pre id="dmContent"></pre></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 <script>
 const BASE='/admin/api'
@@ -533,8 +552,13 @@ modalImg.addEventListener('dblclick',()=>{zScale>1?resetZoom():(zScale=2.5,apply
 modalImg.addEventListener('touchstart',e=>{if(e.touches.length===1){const t=e.touches[0];dragStart(t.clientX,t.clientY)}},{passive:true})
 modalImg.addEventListener('touchmove',e=>{if(e.touches.length===1){const t=e.touches[0];dragMove(t.clientX,t.clientY)}},{passive:true})
 modalImg.addEventListener('touchend',dragEnd)
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&imgModal.classList.contains('show'))closeImg()})
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(imgModal.classList.contains('show'))closeImg();else if(document.getElementById('dataModal').classList.contains('show'))closeDataModal()}})
 imgModal.addEventListener('click',e=>{if(e.target===imgModal)closeImg()})
+const dataModal=document.getElementById('dataModal')
+function showDataModal(scope,dataType,content,updatedAt){document.getElementById('dmScope').textContent=scope;document.getElementById('dmDataType').textContent=dataType;document.getElementById('dmContent').textContent=content;document.getElementById('dmTime').textContent=fmtTime(updatedAt);dataModal.classList.add('show')}
+function closeDataModal(){dataModal.classList.remove('show')}
+dataModal.addEventListener('click',e=>{if(e.target===dataModal)closeDataModal()})
+document.getElementById('syncDetailBody').addEventListener('click',e=>{const td=e.target.closest('.data-preview');if(!td)return;showDataModal(td.dataset.scope,td.dataset.type,td.dataset.content,Number(td.dataset.time))})
 async function pruneImages(){const d=await api('/prune-images','POST');if(d)toast(d.message,'success');loadImages()}
 async function loadAudit(){const d=await api('/audit?limit=50');if(!d)return;const tb=document.getElementById('auditBody');if(!d.length){tb.innerHTML='<tr><td colspan="4" class="empty">暂无日志</td></tr>';return}tb.innerHTML=d.map(l=>{
   const evtMap={callback_pass:'推送-通过',callback_risky:'推送-违规',callback_error:'推送-异常',ignored_event:'忽略事件'}
@@ -559,10 +583,10 @@ async function loadSyncUsers(){const d=await api('/sync-users');if(!d)return;con
   '<td><button onclick="loadSyncDetail(\\''+esc(u.openid)+'\\')">查看</button></td></tr>'}).join('')}
 function backToSyncUsers(){document.getElementById('syncUsersView').style.display='';document.getElementById('syncDetailView').style.display='none';syncCurrentOpenid=''}
 async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syncCurrentOpenid)return;document.getElementById('syncUsersView').style.display='none';document.getElementById('syncDetailView').style.display='';document.getElementById('syncDetailTitle').textContent='用户数据 - '+syncCurrentOpenid.slice(0,12)+'...';const d=await api('/sync-data?openid='+encodeURIComponent(syncCurrentOpenid));if(!d)return;const tb=document.getElementById('syncDetailBody');if(!d.items||!d.items.length){tb.innerHTML='<tr><td colspan="5" class="empty">该用户暂无数据</td></tr>';return}tb.innerHTML=d.items.map(it=>{
-  const preview=typeof it.data==='string'?it.data:JSON.stringify(it.data);const short=preview.length>80?preview.slice(0,80)+'\u2026':preview
+  const preview=typeof it.data==='string'?it.data:JSON.stringify(it.data,null,2);const short=preview.length>80?preview.slice(0,80)+'\u2026':preview
   return '<tr><td><span class="badge pending">'+esc(it.scope)+'</span></td>'+
   '<td style="font-family:monospace;font-size:12px">'+esc(it.dataType)+'</td>'+
-  '<td class="data-preview" title="'+esc(preview)+'">'+esc(short)+'</td>'+
+  '<td class="data-preview" style="cursor:pointer" data-scope="'+esc(it.scope)+'" data-type="'+esc(it.dataType)+'" data-content="'+esc(preview)+'" data-time="'+Number(it.updatedAt)+'">'+esc(short)+'</td>'+
   '<td>'+fmtTime(it.updatedAt)+'</td>'+
   '<td><button onclick="syncDeleteItem(\\''+esc(it.scope)+'\\',\\''+esc(it.dataType)+'\\')" class="btn-danger" style="padding:4px 10px;font-size:12px">删除</button></td></tr>'}).join('')}
 async function syncDeleteItem(scope,dataType){if(!confirm('确定删除 '+scope+'/'+dataType+'？'))return;const r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope,data_type:dataType})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSyncDetail()}else{toast((d&&d.message)||'删除失败','error')}}
