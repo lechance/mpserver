@@ -11,6 +11,7 @@ const syncRouter = require('./src/routes/sync')
 const suggestionRouter = require('./src/routes/suggestion')
 
 const { router: adminRouter, loginLimiter } = require('./src/routes/admin')
+const { prune: pruneSessions } = require('./src/admin-session')
 
 // 初始化 SQLite 数据库（sql.js，纯 JS 无需编译）
 initDb().then(() => {
@@ -21,6 +22,7 @@ initDb().then(() => {
       syncRouter.syncLimiter,
       suggestionRouter.suggestLimiter,
       loginLimiter,
+      { prune: pruneSessions },
     ],
   })
 }).catch(e => {

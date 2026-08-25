@@ -3,10 +3,11 @@ const fs = require('fs')
 const path = require('path')
 const config = require('../config')
 const resultStore = require('../result-store')
-const { adminAuth } = require('../admin-auth')
+const { adminAuth, parseCookies } = require('../admin-auth')
 const { refreshAccessToken } = require('../access-token')
 const { getDb, save } = require('../db')
 const { createLimiter } = require('../rate-limit')
+const { createSession, deleteSession } = require('../admin-session')
 
 const router = express.Router()
 
@@ -16,7 +17,7 @@ const loginLimiter = createLimiter(config.adminRateLimitMax, config.adminRateLim
 /**
  * 管理后台登录（无需认证 — 这就是认证端点）
  * POST /admin/api/login  body: { token }
- * 成功 → { code: 0 }，失败 → 401
+ * 成功 → 创建会话 + HttpOnly Cookie，失败 → 401
  * 写入 audit_log 供审计追踪
  */
 router.post('/api/login', (req, res) => {
@@ -28,6 +29,10 @@ router.post('/api/login', (req, res) => {
   }
   const token = req.body && req.body.token
   if (token === config.adminToken) {
+    const sessionId = createSession(req.ip, config.adminSessionExpiryMs)
+    const maxAge = Math.floor(config.adminSessionExpiryMs / 1000)
+    res.setHeader('Set-Cookie',
+      `admin_session=${sessionId}; HttpOnly; Secure; SameSite=Strict; Path=/admin; Max-Age=${maxAge}`)
     try {
       const db = getDb()
       db.run(
@@ -48,6 +53,26 @@ router.post('/api/login', (req, res) => {
     save()
   } catch {}
   res.status(401).json({ code: 401, message: '管理令牌无效' })
+})
+
+/**
+ * 管理后台登出（销毁会话 + 清除 Cookie）
+ * POST /admin/api/logout
+ */
+router.post('/api/logout', (req, res) => {
+  const cookies = parseCookies(req.headers.cookie)
+  if (cookies.admin_session) deleteSession(cookies.admin_session)
+  res.setHeader('Set-Cookie',
+    'admin_session=; HttpOnly; Secure; SameSite=Strict; Path=/admin; Max-Age=0')
+  try {
+    const db = getDb()
+    db.run(
+      'INSERT INTO audit_log (event, trace_id, detail, created_at) VALUES (?, ?, ?, ?)',
+      ['admin_logout', null, `ip=${req.ip}`, Date.now()]
+    )
+    save()
+  } catch {}
+  res.json({ code: 0 })
 })
 
 /** 管理后台页面（无需认证 — 页面自带登录表单） */
@@ -451,14 +476,13 @@ tr:hover{background:#f5f5f5}
 </div>
 <div class="toast" id="toast"></div>
 <script>
-let TOKEN=sessionStorage.getItem('admin_token')||''
 const BASE='/admin/api'
-const hdr=()=>({'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'})
+function hdr(){return {'Content-Type':'application/json'}}
 function toast(msg,type='info'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.classList.remove('show'),3000)}
 function showLogin(){document.getElementById('loginWrap').style.display='flex';document.getElementById('appWrap').style.display='none'}
 function showApp(){document.getElementById('loginWrap').style.display='none';document.getElementById('appWrap').style.display='flex'}
-function doLogin(){const t=document.getElementById('tokenInput').value.trim();if(!t)return;TOKEN=t;fetch(BASE+'/login',{method:'POST',headers:hdr(),body:JSON.stringify({token:t})}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(()=>{sessionStorage.setItem('admin_token',TOKEN);showApp();init()}).catch(()=>{document.getElementById('loginErr').textContent='令牌无效';document.getElementById('loginErr').style.display='block'})}
-function doLogout(){TOKEN='';sessionStorage.removeItem('admin_token');showLogin()}
+function doLogin(){const t=document.getElementById('tokenInput').value.trim();if(!t)return;fetch(BASE+'/login',{method:'POST',headers:hdr(),body:JSON.stringify({token:t})}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(()=>{showApp();init()}).catch(()=>{document.getElementById('loginErr').textContent='令牌无效';document.getElementById('loginErr').style.display='block'})}
+function doLogout(){fetch(BASE+'/logout',{method:'POST',headers:hdr()}).then(()=>{showLogin()}).catch(()=>{showLogin()})}
 async function api(path,method='GET'){const r=await fetch(BASE+path,{method,headers:hdr()});if(r.status===401){doLogout();return null}return r.json()}
 function fmtSize(b){if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(1)+'MB'}
 function fmtTime(ts){const d=new Date(ts);const now=Date.now();const diff=(now-ts)/1000;if(diff<60)return Math.floor(diff)+'秒前';if(diff<3600)return Math.floor(diff/60)+'分钟前';if(diff<86400)return Math.floor(diff/3600)+'小时前';return d.toLocaleDateString('zh-CN')}
@@ -544,7 +568,7 @@ async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syn
 async function syncDeleteItem(scope,dataType){if(!confirm('确定删除 '+scope+'/'+dataType+'？'))return;const r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope,data_type:dataType})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSyncDetail()}else{toast((d&&d.message)||'删除失败','error')}}
 document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='syncdata'){backToSyncUsers();loadSyncUsers()}if(a.dataset.page==='audit')loadAudit()}});
 function init(){loadStats();setInterval(loadStats,5000)}
-if(TOKEN){fetch(BASE+'/stats',{headers:hdr()}).then(r=>{if(r.ok){showApp();init()}else doLogout()}).catch(()=>doLogout())}
+fetch(BASE+'/stats',{headers:hdr()}).then(r=>{if(r.ok){showApp();init()}else showLogin()}).catch(()=>showLogin())
 document.getElementById('tokenInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 </script>
 </body>
