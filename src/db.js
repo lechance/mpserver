@@ -87,6 +87,13 @@ async function init() {
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_suggestions_created_at ON suggestions(created_at DESC)
   `)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS app_config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL
+    )
+  `)
 
   save()
   return db

@@ -326,6 +326,44 @@ router.post('/api/refresh-token', async (req, res) => {
   }
 })
 
+/** 应用配置 — 获取当前值 */
+router.get('/api/app-config', (req, res) => {
+  const db = getDb()
+  const flags = {}
+  try {
+    const stmt = db.prepare('SELECT key, value FROM app_config')
+    while (stmt.step()) {
+      const r = stmt.getAsObject()
+      flags[r.key] = r.value
+    }
+    stmt.free()
+  } catch {}
+  res.json({ code: 0, flags })
+})
+
+/** 应用配置 — 设置开关 */
+router.post('/api/app-config', (req, res) => {
+  const key = req.body && req.body.key
+  const value = req.body && req.body.value
+  if (typeof key !== 'string' || !key.match(/^[a-z0-9_]{1,64}$/)) {
+    return res.status(400).json({ code: 400, message: 'key 无效' })
+  }
+  if (value !== '0' && value !== '1') {
+    return res.status(400).json({ code: 400, message: 'value 无效，仅允许 0 或 1' })
+  }
+  const db = getDb()
+  db.run(
+    'INSERT INTO app_config (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+    [key, value, Date.now()]
+  )
+  db.run(
+    'INSERT INTO audit_log (event, trace_id, detail, created_at) VALUES (?, ?, ?, ?)',
+    ['app_config_change', null, `ip=${req.ip} key=${key} value=${value}`, Date.now()]
+  )
+  save()
+  res.json({ code: 0, message: '已更新' })
+})
+
 const DASHBOARD_HTML = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -429,6 +467,20 @@ tr:hover{background:#f5f5f5}
     <div class="page active" id="page-dashboard">
       <h2>系统概览</h2>
       <div class="stat-cards" id="statCards"></div>
+      <div class="table-wrap" style="margin-top:16px">
+        <div class="toolbar"><h3>功能开关</h3><button onclick="loadAppConfig()">刷新</button></div>
+        <div style="padding:20px" id="appConfigBody">
+          <div style="display:flex;align-items:center;gap:12px">
+            <span style="font-size:14px;color:#333">卡券 TAB</span>
+            <label id="couponsTabSwitch" style="position:relative;display:inline-block;width:48px;height:26px;cursor:pointer">
+              <input type="checkbox" id="couponsTabCheck" style="display:none" onchange="toggleAppConfig('coupons_tab',this.checked)">
+              <span style="position:absolute;inset:0;background:#ccc;border-radius:13px;transition:.3s"></span>
+              <span id="couponsTabSlider" style="position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:.3s"></span>
+            </label>
+            <span id="couponsTabLabel" style="font-size:13px;color:#8c8c8c"></span>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="page" id="page-checks">
       <div class="table-wrap">
@@ -591,7 +643,10 @@ async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syn
   '<td><button onclick="syncDeleteItem(\\''+esc(it.scope)+'\\',\\''+esc(it.dataType)+'\\')" class="btn-danger" style="padding:4px 10px;font-size:12px">删除</button></td></tr>'}).join('')}
 async function syncDeleteItem(scope,dataType){if(!confirm('确定删除 '+scope+'/'+dataType+'？'))return;const r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope,data_type:dataType})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSyncDetail()}else{toast((d&&d.message)||'删除失败','error')}}
 document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='syncdata'){backToSyncUsers();loadSyncUsers()}if(a.dataset.page==='audit')loadAudit()}});
-function init(){loadStats();setInterval(loadStats,5000)}
+async function loadAppConfig(){const d=await api('/app-config');if(!d)return;const checked=d.flags&&d.flags.coupons_tab!=='0';document.getElementById('couponsTabCheck').checked=checked;updateSwitchUI('couponsTab',checked)}
+function updateSwitchUI(prefix,checked){const slider=document.getElementById(prefix+'Slider');const label=document.getElementById(prefix+'Label');const wrap=slider.parentElement;if(checked){wrap.style.background='#52c41a';slider.style.left='25px';label.textContent='启用';label.style.color='#52c41a'}else{wrap.style.background='#ccc';slider.style.left='3px';label.textContent='已关闭';label.style.color='#8c8c8c'}}
+async function toggleAppConfig(key,checked){const value=checked?'1':'0';const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key,value})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已更新','success');updateSwitchUI('couponsTab',checked)}else{toast((d&&d.message)||'更新失败','error');document.getElementById('couponsTabCheck').checked=!checked;updateSwitchUI('couponsTab',!checked)}}
+function init(){loadStats();loadAppConfig();setInterval(loadStats,5000)}
 fetch(BASE+'/stats',{headers:hdr()}).then(r=>{if(r.ok){showApp();init()}else showLogin()}).catch(()=>showLogin())
 document.getElementById('tokenInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 </script>

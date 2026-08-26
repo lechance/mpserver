@@ -55,6 +55,26 @@ Session-level backup for the mini program: client pulls on launch, pushes on app
 
 Matches the mini program's 工具建议 page (`lifetools/src/pages/suggestion/index.vue`). Body: `{ type: 'improve'|'new', toolId?, toolName?, content, time? }` — client treats any 2xx as success. **No identity**: the client sends no `wx.login` code here, so there is no openid — protection is per-IP rate limiting only (`SUGGEST_RATE_LIMIT_MAX`/`SUGGEST_RATE_LIMIT_WINDOW_MS`, default 5/10min). Validation: `type` must be `improve|new`; `content` required, trimmed, ≤500 chars (matches client `maxlength`); `toolId`/`toolName` dropped if not short strings. Stored in the `suggestions` SQLite table; admin dashboard has a 用户建议 page (list + delete) and a count on the overview.
 
+## App config (`GET /api/app-config`, `src/routes/app-config.js`)
+
+Public endpoint returning client-visible feature flags (currently: whether to hide tabs). **No identity**, per-IP rate limited (30/min). Response:
+
+```json
+{ "code": 0, "config": { "hiddenTabs": ["coupons"] } }
+```
+
+Rows are stored in the `app_config` SQLite table (`key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER`). Known keys:
+
+- `coupons_tab`: `'1'` (default, show) or `'0'` (hide). Absent = show.
+
+CORS: `Access-Control-Allow-Origin: *` on this endpoint only (allows H5 browsers to fetch; mini-programs are unaffected).
+
+Admin endpoints (require `ADMIN_TOKEN`):
+- `GET /admin/api/app-config` → `{code:0, flags:{coupons_tab:'1'|'0'}}`
+- `POST /admin/api/app-config` body `{key:'coupons_tab', value:'0'|'1'}` → `{code:0, message:'已更新'}` (writes `app_config` table + `audit_log` as `app_config_change`)
+
+Dashboard HTML includes a 功能开关 toggle card for the coupons tab.
+
 ## Admin dashboard — sync data viewing (`/admin/api/sync-*`)
 
 The admin dashboard has a 同步数据 page for inspecting user cloud-synced data in the `user_data` table. Endpoints (all require `ADMIN_TOKEN`):

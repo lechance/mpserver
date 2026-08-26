@@ -9,6 +9,7 @@ const app = express()
 const secCheckRouter = require('./src/routes/sec-check')
 const syncRouter = require('./src/routes/sync')
 const suggestionRouter = require('./src/routes/suggestion')
+const appConfigRouter = require('./src/routes/app-config')
 
 const { router: adminRouter, loginLimiter } = require('./src/routes/admin')
 const { prune: pruneSessions } = require('./src/admin-session')
@@ -21,6 +22,7 @@ initDb().then(() => {
       secCheckRouter.submitLimiter,
       syncRouter.syncLimiter,
       suggestionRouter.suggestLimiter,
+      appConfigRouter.limiter,
       loginLimiter,
       { prune: pruneSessions },
     ],
@@ -60,6 +62,7 @@ app.use('/api/sec-check', secCheckRouter)
 app.use('/api/sec-check/callback', require('./src/routes/wx-callback'))
 app.use('/api/sync', syncRouter)
 app.use('/api/suggestion', suggestionRouter)
+app.use('/api/app-config', appConfigRouter)
 
 // 统一错误处理（multer 文件大小/类型等）
 app.use((err, req, res, next) => {
