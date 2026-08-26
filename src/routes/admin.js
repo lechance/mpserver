@@ -509,7 +509,7 @@ async function loadStats(){const d=await api('/stats');if(!d)return;document.get
   <div class="stat-card"><div class="label">系统运行</div><div class="value blue">\${Math.floor(d.uptime/3600)}h \${Math.floor((d.uptime%3600)/60)}m</div></div>
   <div class="stat-card"><div class="label">内存使用</div><div class="value">\${d.memory}MB</div></div>
   <div class="stat-card"><div class="label">Node 版本</div><div class="value">\${d.nodeVersion}</div></div>
-  <div class="stat-card"><div class="label">今日检测</div><div class="value">\${d.checks.total}</div></div>
+  <div class="stat-card"><div class="label">累计检测</div><div class="value">\${d.checks.total}</div></div>
   <div class="stat-card"><div class="label">通过</div><div class="value green">\${d.checks.pass}</div></div>
   <div class="stat-card"><div class="label">违规</div><div class="value red">\${d.checks.risky}</div></div>
   <div class="stat-card"><div class="label">进行中</div><div class="value blue">\${d.checks.pending}</div></div>

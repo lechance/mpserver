@@ -57,14 +57,13 @@ function get(traceId) {
 }
 
 /**
- * 返回最近 n 条记录（按创建时间倒序）
+ * 返回最近 n 条记录（按创建时间倒序，全量不限时间）
  */
 function list(n = 50) {
   const db = getDb()
-  const cutoff = Date.now() - TTL_MS
   const results = []
-  const stmt = db.prepare('SELECT trace_id, token, filename, status, code, safe, message, created_at FROM checks WHERE created_at > ? ORDER BY created_at DESC LIMIT ?')
-  stmt.bind([cutoff, n])
+  const stmt = db.prepare('SELECT trace_id, token, filename, status, code, safe, message, created_at FROM checks ORDER BY created_at DESC LIMIT ?')
+  stmt.bind([n])
   while (stmt.step()) {
     const r = stmt.getAsObject()
     results.push({ traceId: r.trace_id, token: r.token, filename: r.filename, status: r.status, code: r.code, safe: r.safe === 1, message: r.message, createdAt: r.created_at })
@@ -74,20 +73,19 @@ function list(n = 50) {
 }
 
 /**
- * 返回统计信息
+ * 返回累计统计信息（未过滤时间范围）
+ * 注意：checks 表永不 prune，此处为全量累计；若重新启用每小时 prune，总数将缩短为 TTL 窗口
  */
 function listStats() {
   const db = getDb()
-  const cutoff = Date.now() - TTL_MS
   const stmt = db.prepare(`
     SELECT
       COUNT(*) as total,
       SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
       SUM(CASE WHEN safe = 1 THEN 1 ELSE 0 END) as pass,
       SUM(CASE WHEN safe = 0 AND status = 'done' THEN 1 ELSE 0 END) as risky
-    FROM checks WHERE created_at > ?
+    FROM checks
   `)
-  stmt.bind([cutoff])
   stmt.step()
   const r = stmt.getAsObject()
   stmt.free()
