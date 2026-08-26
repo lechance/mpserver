@@ -3,17 +3,16 @@ const { getDb, save } = require('../db')
 const { createLimiter } = require('../rate-limit')
 
 /**
- * 公开接口：客户端拉取应用级功能开关（卡券TAB等）
+ * 公开接口：客户端拉取应用级功能开关（卡券TAB、工具广告等）
  * GET /api/app-config  无需认证，按 IP 限流
- * 响应：{ code:0, config:{ hiddenTabs:['coupons'] } }
- * 缺失行或 coupons_tab='1' → 空 hiddenTabs（默认启用）
+ * 响应：{ code:0, config:{ hiddenTabs:['coupons'], adTools:['wooden-fish'] } }
  */
 const router = express.Router()
 
 const limiter = createLimiter(30, 60 * 1000) // 30 次/分钟
 
 const DEFAULT_FLAGS = {
-  coupons_tab: '1', // 启用
+  coupons_tab: '1', // 启用卡券TAB
 }
 
 function getConfig() {
@@ -27,11 +26,24 @@ function getConfig() {
     }
     stmt.free()
   } catch {}
-  // 合并默认值
   const merged = { ...DEFAULT_FLAGS, ...flags }
+
+  // hiddenTabs
   const hiddenTabs = []
   if (merged.coupons_tab === '0') hiddenTabs.push('coupons')
-  return { hiddenTabs }
+
+  // adTools（JSON 数组字符串，解析失败返回空数组）
+  let adTools = []
+  if (merged.ad_tools) {
+    try {
+      const parsed = JSON.parse(merged.ad_tools)
+      if (Array.isArray(parsed)) {
+        adTools = parsed.filter(id => typeof id === 'string' && /^[a-z0-9-]{1,64}$/.test(id)).slice(0, 200)
+      }
+    } catch {}
+  }
+
+  return { hiddenTabs, adTools }
 }
 
 router.get('/', (req, res) => {
@@ -40,14 +52,12 @@ router.get('/', (req, res) => {
       return res.status(429).json({ code: 429, message: '请求过于频繁' })
     }
     const configData = getConfig()
-    // CORS：允许任意来源（公开非敏感配置）
     res.set('Access-Control-Allow-Origin', '*')
     res.json({ code: 0, config: configData })
   } catch (e) {
     console.error('[app-config] error:', e)
-    // 兜底：fail-open，返回空配置（客户端默认启用）
     res.set('Access-Control-Allow-Origin', '*')
-    res.json({ code: 0, config: { hiddenTabs: [] } })
+    res.json({ code: 0, config: { hiddenTabs: [], adTools: [] } })
   }
 })
 

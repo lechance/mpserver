@@ -348,17 +348,38 @@ router.post('/api/app-config', (req, res) => {
   if (typeof key !== 'string' || !key.match(/^[a-z0-9_]{1,64}$/)) {
     return res.status(400).json({ code: 400, message: 'key 无效' })
   }
-  if (value !== '0' && value !== '1') {
-    return res.status(400).json({ code: 400, message: 'value 无效，仅允许 0 或 1' })
+  // 按 key 校验 value
+  if (key === 'coupons_tab') {
+    if (value !== '0' && value !== '1') {
+      return res.status(400).json({ code: 400, message: 'coupons_tab 仅允许 0 或 1' })
+    }
+  } else if (key === 'ad_tools') {
+    // value 须为 JSON 数组，每项合法工具 id
+    try {
+      const arr = JSON.parse(value)
+      if (!Array.isArray(arr) || arr.length > 200) {
+        return res.status(400).json({ code: 400, message: 'ad_tools 须为数组且不超过 200 项' })
+      }
+      for (const id of arr) {
+        if (typeof id !== 'string' || !/^[a-z0-9-]{1,64}$/.test(id)) {
+          return res.status(400).json({ code: 400, message: `ad_tools 工具 id 无效: ${String(id).slice(0, 32)}` })
+        }
+      }
+    } catch {
+      return res.status(400).json({ code: 400, message: 'ad_tools 须为合法 JSON 数组' })
+    }
+  } else {
+    return res.status(400).json({ code: 400, message: '未知的 key' })
   }
   const db = getDb()
   db.run(
     'INSERT INTO app_config (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
     [key, value, Date.now()]
   )
+  const displayValue = key === 'ad_tools' ? (() => { try { return JSON.parse(value).length + ' 个工具' } catch { return value } })() : value
   db.run(
     'INSERT INTO audit_log (event, trace_id, detail, created_at) VALUES (?, ?, ?, ?)',
-    ['app_config_change', null, `ip=${req.ip} key=${key} value=${value}`, Date.now()]
+    ['app_config_change', null, `ip=${req.ip} key=${key} value=${displayValue}`, Date.now()]
   )
   save()
   res.json({ code: 0, message: '已更新' })
@@ -470,14 +491,23 @@ tr:hover{background:#f5f5f5}
       <div class="table-wrap" style="margin-top:16px">
         <div class="toolbar"><h3>功能开关</h3><button onclick="loadAppConfig()">刷新</button></div>
         <div style="padding:20px" id="appConfigBody">
-          <div style="display:flex;align-items:center;gap:12px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
             <span style="font-size:14px;color:#333">卡券 TAB</span>
             <label id="couponsTabSwitch" style="position:relative;display:inline-block;width:48px;height:26px;cursor:pointer">
-              <input type="checkbox" id="couponsTabCheck" style="display:none" onchange="toggleAppConfig('coupons_tab',this.checked)">
+              <input type="checkbox" id="couponsTabCheck" style="display:none" onchange="toggleAppConfig('coupons_tab',this.checked?'1':'0')">
               <span style="position:absolute;inset:0;background:#ccc;border-radius:13px;transition:.3s"></span>
               <span id="couponsTabSlider" style="position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:.3s"></span>
             </label>
             <span id="couponsTabLabel" style="font-size:13px;color:#8c8c8c"></span>
+          </div>
+          <div style="border-top:1px solid #f0f0f0;padding-top:16px">
+            <div style="font-size:14px;color:#333;margin-bottom:8px;font-weight:600">广告工具（激励视频）</div>
+            <div style="font-size:12px;color:#8c8c8c;margin-bottom:8px">每行一个工具 id（如 wooden-fish），保存后云端生效</div>
+            <textarea id="adToolsInput" rows="4" style="width:100%;padding:10px;border:1px solid #d9d9d9;border-radius:6px;font-size:13px;font-family:monospace;resize:vertical" placeholder="wooden-fish&#10;ct-scan&#10;lottery"></textarea>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+              <button onclick="saveAdTools()" style="padding:6px 20px;background:#1890ff;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">保存</button>
+              <span id="adToolsHint" style="font-size:12px;color:#8c8c8c"></span>
+            </div>
           </div>
         </div>
       </div>
@@ -643,9 +673,10 @@ async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syn
   '<td><button onclick="syncDeleteItem(\\''+esc(it.scope)+'\\',\\''+esc(it.dataType)+'\\')" class="btn-danger" style="padding:4px 10px;font-size:12px">删除</button></td></tr>'}).join('')}
 async function syncDeleteItem(scope,dataType){if(!confirm('确定删除 '+scope+'/'+dataType+'？'))return;const r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope,data_type:dataType})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSyncDetail()}else{toast((d&&d.message)||'删除失败','error')}}
 document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='syncdata'){backToSyncUsers();loadSyncUsers()}if(a.dataset.page==='audit')loadAudit()}});
-async function loadAppConfig(){const d=await api('/app-config');if(!d)return;const checked=d.flags&&d.flags.coupons_tab!=='0';document.getElementById('couponsTabCheck').checked=checked;updateSwitchUI('couponsTab',checked)}
+async function loadAppConfig(){const d=await api('/app-config');if(!d)return;const checked=d.flags&&d.flags.coupons_tab!=='0';document.getElementById('couponsTabCheck').checked=checked;updateSwitchUI('couponsTab',checked);let ids=[];if(d.flags&&d.flags.ad_tools){try{ids=JSON.parse(d.flags.ad_tools);if(!Array.isArray(ids))ids=[]}catch{}}document.getElementById('adToolsInput').value=ids.join('\n');document.getElementById('adToolsHint').textContent='当前 '+ids.length+' 个工具启用广告'}
 function updateSwitchUI(prefix,checked){const slider=document.getElementById(prefix+'Slider');const label=document.getElementById(prefix+'Label');const wrap=slider.parentElement;if(checked){wrap.style.background='#52c41a';slider.style.left='25px';label.textContent='启用';label.style.color='#52c41a'}else{wrap.style.background='#ccc';slider.style.left='3px';label.textContent='已关闭';label.style.color='#8c8c8c'}}
-async function toggleAppConfig(key,checked){const value=checked?'1':'0';const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key,value})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已更新','success');updateSwitchUI('couponsTab',checked)}else{toast((d&&d.message)||'更新失败','error');document.getElementById('couponsTabCheck').checked=!checked;updateSwitchUI('couponsTab',!checked)}}
+async function toggleAppConfig(key,value){const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key,value})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已更新','success');if(key==='coupons_tab'){updateSwitchUI('couponsTab',value==='1')}}else{toast((d&&d.message)||'更新失败','error');if(key==='coupons_tab'){const cb=document.getElementById('couponsTabCheck');cb.checked=!cb.checked;updateSwitchUI('couponsTab',cb.checked)}}}
+async function saveAdTools(){const raw=document.getElementById('adToolsInput').value;const ids=raw.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);const invalid=ids.filter(id=>!/^[a-z0-9-]{1,64}$/.test(id));if(invalid.length){toast('无效 id: '+invalid.slice(0,3).join(', ')+(invalid.length>3?' ...':''),'error');return}const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key:'ad_tools',value:JSON.stringify(ids)})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已保存 '+ids.length+' 个工具','success');document.getElementById('adToolsHint').textContent='当前 '+ids.length+' 个工具启用广告'}else{toast((d&&d.message)||'保存失败','error')}}
 function init(){loadStats();loadAppConfig();setInterval(loadStats,5000)}
 fetch(BASE+'/stats',{headers:hdr()}).then(r=>{if(r.ok){showApp();init()}else showLogin()}).catch(()=>showLogin())
 document.getElementById('tokenInput').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});

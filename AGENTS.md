@@ -66,12 +66,13 @@ Public endpoint returning client-visible feature flags (currently: whether to hi
 Rows are stored in the `app_config` SQLite table (`key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER`). Known keys:
 
 - `coupons_tab`: `'1'` (default, show) or `'0'` (hide). Absent = show.
+- `ad_tools`: JSON array string (e.g. `'["wooden-fish","ct-scan"]'`). Each item must match `/^[a-z0-9-]{1,64}$/`, max 200 items. Absent = empty array (no tools require ads).
 
 CORS: `Access-Control-Allow-Origin: *` on this endpoint only (allows H5 browsers to fetch; mini-programs are unaffected).
 
 Admin endpoints (require `ADMIN_TOKEN`):
 - `GET /admin/api/app-config` → `{code:0, flags:{coupons_tab:'1'|'0'}}`
-- `POST /admin/api/app-config` body `{key:'coupons_tab', value:'0'|'1'}` → `{code:0, message:'已更新'}` (writes `app_config` table + `audit_log` as `app_config_change`)
+- `POST /admin/api/app-config` body `{key:'coupons_tab', value:'0'|'1'}` or `{key:'ad_tools', value:'["tool-id"]'}` → `{code:0, message:'已更新'}` (writes `app_config` table + `audit_log` as `app_config_change`). Validation: `coupons_tab` value must be `'0'` or `'1'`; `ad_tools` value must be valid JSON array of ≤200 items, each matching `/^[a-z0-9-]{1,64}$/`.
 
 Dashboard HTML includes a 功能开关 toggle card for the coupons tab.
 
