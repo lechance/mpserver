@@ -1,0 +1,353 @@
+[
+  {
+    "key": "hot",
+    "name": "热门",
+    "tools": [
+      {
+        "id": "calculator",
+        "name": "科学计算器",
+        "icon": "🔢"
+      },
+      {
+        "id": "flashlight",
+        "name": "屏幕警报",
+        "icon": "📱"
+      },
+      {
+        "id": "phone-flashlight",
+        "name": "手机闪光灯",
+        "icon": "🔦"
+      },
+      {
+        "id": "countdown",
+        "name": "节日倒计时",
+        "icon": "⏰"
+      },
+      {
+        "id": "today-in-history",
+        "name": "历史上的今天",
+        "icon": "📜"
+      },
+      {
+        "id": "pomodoro",
+        "name": "番茄专注",
+        "icon": "🍅"
+      },
+      {
+        "id": "led-marquee",
+        "name": "LED弹幕",
+        "icon": "💡"
+      },
+      {
+        "id": "decibel",
+        "name": "分贝测试",
+        "icon": "🔊"
+      },
+      {
+        "id": "altimeter",
+        "name": "海拔测量",
+        "icon": "⛰️"
+      },
+      {
+        "id": "ancient-poetry",
+        "name": "诗泉",
+        "icon": "🖊️"
+      }
+    ]
+  },
+  {
+    "key": "life",
+    "name": "生活",
+    "tools": [
+      {
+        "id": "weather",
+        "name": "天气查询",
+        "icon": "🌤️"
+      },
+      {
+        "id": "calendar",
+        "name": "日历日程",
+        "icon": "📅"
+      },
+      {
+        "id": "exchange-rate",
+        "name": "汇率换算",
+        "icon": "💱"
+      },
+      {
+        "id": "size-chart",
+        "name": "尺码对照",
+        "icon": "👕"
+      },
+      {
+        "id": "period-tracker",
+        "name": "生理期记录",
+        "icon": "❤️"
+      },
+      {
+        "id": "garbage-classify",
+        "name": "垃圾分类查询",
+        "icon": "♻️"
+      },
+      {
+        "id": "safe-period",
+        "name": "安全期计算",
+        "icon": "🩺"
+      },
+      {
+        "id": "shelf-life",
+        "name": "保质期计算",
+        "icon": "⏳"
+      },
+      {
+        "id": "birthday-countdown",
+        "name": "生日倒计时",
+        "icon": "🥳"
+      },
+      {
+        "id": "anniversary",
+        "name": "纪念日",
+        "icon": "📅"
+      }
+    ]
+  },
+  {
+    "key": "fun",
+    "name": "娱乐",
+    "tools": [
+      {
+        "id": "dice",
+        "name": "掷骰子",
+        "icon": "🎲"
+      },
+      {
+        "id": "lottery",
+        "name": "抽签摇号",
+        "icon": "🎰"
+      },
+      {
+        "id": "sudoku",
+        "name": "数独游戏",
+        "icon": "🔢"
+      },
+      {
+        "id": "idiom-chain",
+        "name": "成语接龙",
+        "icon": "📖"
+      },
+      {
+        "id": "guess-number",
+        "name": "猜数字",
+        "icon": "❓"
+      },
+      {
+        "id": "rock-scissors",
+        "name": "石头剪刀布",
+        "icon": "✊"
+      },
+      {
+        "id": "ct-scan",
+        "name": "搞怪检查",
+        "icon": "🩻"
+      },
+      {
+        "id": "wooden-fish",
+        "name": "敲木鱼",
+        "icon": "🪵"
+      },
+      {
+        "id": "fart-simulator",
+        "name": "放屁模拟器",
+        "icon": "💨"
+      }
+    ]
+  },
+  {
+    "key": "image",
+    "name": "图片",
+    "tools": [
+      {
+        "id": "image-compress",
+        "name": "图片压缩",
+        "icon": "🗜️"
+      },
+      {
+        "id": "image-crop",
+        "name": "图片裁剪",
+        "icon": "✂️"
+      },
+      {
+        "id": "image-filter",
+        "name": "图片滤镜",
+        "icon": "🎨"
+      },
+      {
+        "id": "image-stitch",
+        "name": "图片拼接",
+        "icon": "🧩"
+      },
+      {
+        "id": "color-picker",
+        "name": "颜色提取器",
+        "icon": "🎯"
+      },
+      {
+        "id": "meme-maker",
+        "name": "表情包制作",
+        "icon": "🖼️"
+      },
+      {
+        "id": "id-photo",
+        "name": "证件照制作",
+        "icon": "📷"
+      },
+      {
+        "id": "watermark",
+        "name": "图片水印",
+        "icon": "💧"
+      },
+      {
+        "id": "avatar-deco",
+        "name": "头像加装饰",
+        "icon": "👤"
+      },
+      {
+        "id": "grid-split",
+        "name": "九宫格切图",
+        "icon": "🔲"
+      },
+      {
+        "id": "watermark-remove",
+        "name": "去水印",
+        "icon": "🧹"
+      }
+    ]
+  },
+  {
+    "key": "calc",
+    "name": "计算",
+    "tools": [
+      {
+        "id": "loan-calc",
+        "name": "房贷计算器",
+        "icon": "🏦"
+      },
+      {
+        "id": "tax-calc",
+        "name": "个税计算器",
+        "icon": "🧾"
+      },
+      {
+        "id": "bmi-calc",
+        "name": "BMI计算器",
+        "icon": "📊"
+      },
+      {
+        "id": "age-calc",
+        "name": "年龄计算器",
+        "icon": "🎂"
+      },
+      {
+        "id": "base-convert",
+        "name": "进制转换",
+        "icon": "💻"
+      },
+      {
+        "id": "amount-upper",
+        "name": "金额转大写",
+        "icon": "💵"
+      },
+      {
+        "id": "date-calc",
+        "name": "日期计算器",
+        "icon": "📆"
+      },
+      {
+        "id": "random",
+        "name": "随机数生成",
+        "icon": "🎲"
+      },
+      {
+        "id": "retirement-calc",
+        "name": "退休年龄计算",
+        "icon": "🧓"
+      }
+    ]
+  },
+  {
+    "key": "utility",
+    "name": "实用",
+    "tools": [
+      {
+        "id": "todo-list",
+        "name": "待办清单",
+        "icon": "✅"
+      },
+      {
+        "id": "memo",
+        "name": "备忘录",
+        "icon": "📝"
+      },
+      {
+        "id": "timer",
+        "name": "计时器",
+        "icon": "⏱️"
+      },
+      {
+        "id": "pedometer",
+        "name": "计步器",
+        "icon": "👟"
+      },
+      {
+        "id": "ruler",
+        "name": "尺子测量",
+        "icon": "📐"
+      },
+      {
+        "id": "plate-lookup",
+        "name": "车牌归属地",
+        "icon": "🚗"
+      },
+      {
+        "id": "id-card",
+        "name": "身份证解析",
+        "icon": "🆔"
+      },
+      {
+        "id": "password-gen",
+        "name": "随机密码生成",
+        "icon": "🔐"
+      },
+      {
+        "id": "qr-code",
+        "name": "二维码工具",
+        "icon": "📱"
+      },
+      {
+        "id": "photo-filter",
+        "name": "拍照滤镜",
+        "icon": "📸"
+      },
+      {
+        "id": "unit-convert",
+        "name": "单位换算",
+        "icon": "🔄"
+      },
+      {
+        "id": "api-balance",
+        "name": "模型余额",
+        "icon": "💰"
+      },
+      {
+        "id": "gold-price",
+        "name": "国际实时金价",
+        "icon": "🥇"
+      },
+      {
+        "id": "payment-voice",
+        "name": "模拟到帐语音",
+        "icon": "🔊"
+      }
+    ]
+  }
+]

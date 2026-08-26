@@ -9,6 +9,12 @@ const { getDb, save } = require('../db')
 const { createLimiter } = require('../rate-limit')
 const { createSession, deleteSession } = require('../admin-session')
 
+// 工具目录（由 lifetools/scripts/export-tools-catalog.mjs 生成）
+let TOOLS_CATALOG = []
+try {
+  TOOLS_CATALOG = JSON.parse(fs.readFileSync(path.join(__dirname, '../tools-catalog.json'), 'utf8'))
+} catch {}
+
 const router = express.Router()
 
 /** 管理后台登录限流（per IP） */
@@ -521,12 +527,7 @@ input::placeholder,textarea::placeholder{color:var(--text-muted)}
           </div>
           <div style="border-top:1px solid var(--border);padding-top:16px">
             <div style="font-size:14px;color:var(--text);margin-bottom:8px;font-weight:600">广告工具（激励视频）</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">每行一个工具 id（如 wooden-fish），保存后云端生效</div>
-            <textarea id="adToolsInput" rows="4" style="width:100%;padding:10px;border:1px solid var(--border-input);border-radius:6px;font-size:13px;font-family:monospace;resize:vertical;background:var(--bg-input);color:var(--text-primary)" placeholder="wooden-fish&#10;ct-scan&#10;lottery"></textarea>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
-              <button onclick="saveAdTools()" style="padding:6px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">保存</button>
-              <span id="adToolsHint" style="font-size:12px;color:var(--text-muted)"></span>
-            </div>
+            <div id="adToolsBody" style="font-size:13px;color:var(--text-secondary)"></div>
           </div>
         </div>
       </div>
@@ -596,6 +597,7 @@ input::placeholder,textarea::placeholder{color:var(--text-muted)}
 </div>
 <div class="toast" id="toast"></div>
 <script>
+const TOOLS_CATALOG = ${JSON.stringify(TOOLS_CATALOG)};
 const BASE='/admin/api'
 function hdr(){return {'Content-Type':'application/json'}}
 function toast(msg,type='info'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.classList.remove('show'),3000)}
@@ -692,10 +694,14 @@ async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syn
   '<td><button onclick="syncDeleteItem(\\''+esc(it.scope)+'\\',\\''+esc(it.dataType)+'\\')" class="btn-danger" style="padding:4px 10px;font-size:12px">删除</button></td></tr>'}).join('')}
 async function syncDeleteItem(scope,dataType){if(!confirm('确定删除 '+scope+'/'+dataType+'？'))return;const r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope,data_type:dataType})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSyncDetail()}else{toast((d&&d.message)||'删除失败','error')}}
 document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='syncdata'){backToSyncUsers();loadSyncUsers()}if(a.dataset.page==='audit')loadAudit()}});
-async function loadAppConfig(){const d=await api('/app-config');if(!d)return;const checked=d.flags&&d.flags.coupons_tab!=='0';document.getElementById('couponsTabCheck').checked=checked;updateSwitchUI('couponsTab',checked);let ids=[];if(d.flags&&d.flags.ad_tools){try{ids=JSON.parse(d.flags.ad_tools);if(!Array.isArray(ids))ids=[]}catch{}}document.getElementById('adToolsInput').value=ids.join('\\n');document.getElementById('adToolsHint').textContent='当前 '+ids.length+' 个工具启用广告'}
+async function loadAppConfig(){const d=await api('/app-config');if(!d)return;const checked=d.flags&&d.flags.coupons_tab!=='0';document.getElementById('couponsTabCheck').checked=checked;updateSwitchUI('couponsTab',checked);let ids=[];if(d.flags&&d.flags.ad_tools){try{ids=JSON.parse(d.flags.ad_tools);if(!Array.isArray(ids))ids=[]}catch{}}renderAdTools(ids)}
 function updateSwitchUI(prefix,checked){document.getElementById(prefix+'Switch').className=checked?'switch on':'switch';const l=document.getElementById(prefix+'Label');l.className=checked?'switch-label on':'switch-label';l.textContent=checked?'启用':'已关闭'}
 async function toggleAppConfig(key,value){const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key,value})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已更新','success');if(key==='coupons_tab'){updateSwitchUI('couponsTab',value==='1')}}else{toast((d&&d.message)||'更新失败','error');if(key==='coupons_tab'){const cb=document.getElementById('couponsTabCheck');cb.checked=!cb.checked;updateSwitchUI('couponsTab',cb.checked)}}}
-async function saveAdTools(){const raw=document.getElementById('adToolsInput').value;const ids=raw.split(/[\\n,]+/).map(s=>s.trim()).filter(Boolean);const invalid=ids.filter(id=>!/^[a-z0-9-]{1,64}$/.test(id));if(invalid.length){toast('无效 id: '+invalid.slice(0,3).join(', ')+(invalid.length>3?' ...':''),'error');return}const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key:'ad_tools',value:JSON.stringify(ids)})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已保存 '+ids.length+' 个工具','success');document.getElementById('adToolsHint').textContent='当前 '+ids.length+' 个工具启用广告'}else{toast((d&&d.message)||'保存失败','error')}}
+function renderAdTools(activeIds){const body=document.getElementById('adToolsBody');const active=new Set(activeIds);if(!TOOLS_CATALOG.length){body.innerHTML='<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">工具目录未同步，请在 lifetools 运行 <code>node scripts/export-tools-catalog.mjs</code></div><textarea id="adToolsInput" rows="4" style="width:100%;padding:10px;border:1px solid var(--border-input);border-radius:6px;font-size:13px;font-family:monospace;resize:vertical;background:var(--bg-input);color:var(--text-primary)" placeholder="wooden-fish&#10;ct-scan&#10;lottery"></textarea><div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button onclick="saveAdToolsFromTextarea()" style="padding:6px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">保存</button><span id="adToolsHint" style="font-size:12px;color:var(--text-muted)">当前 '+activeIds.length+' 个工具启用广告</span></div>';body.querySelector('#adToolsInput').value=activeIds.join('\n');return}let html='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><button onclick="toggleAllAdTools(true)" style="padding:4px 12px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer;font-size:12px">全选</button><button onclick="toggleAllAdTools(false)" style="padding:4px 12px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer;font-size:12px">清空</button><button onclick="saveAdToolsFromCheckboxes()" style="padding:4px 20px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">保存</button><span id="adToolsHint" style="font-size:12px;color:var(--text-muted)"></span></div>';const unknownIds=activeIds.filter(id=>!TOOLS_CATALOG.some(c=>c.tools.some(t=>t.id===id)));TOOLS_CATALOG.forEach(cat=>{html+='<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">'+cat.name+'</div><div style="display:flex;flex-wrap:wrap;gap:4px 12px">';cat.tools.forEach(t=>{const checked=active.has(t.id)?' checked':'';html+='<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;color:var(--text)"><input type="checkbox" class="ad-tool-cb" value="'+t.id+'"'+checked+'><span>'+t.icon+'</span><span>'+t.name+'</span><span style="font-size:11px;color:var(--text-muted);font-family:monospace">'+t.id+'</span></label>'});html+='</div></div>'});if(unknownIds.length){html+='<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:4px">未收录（'+unknownIds.length+' 个）</div><div style="display:flex;flex-wrap:wrap;gap:4px 12px">';unknownIds.forEach(id=>{html+='<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;color:var(--text)"><input type="checkbox" class="ad-tool-cb" value="'+id+'" checked><span style="font-family:monospace">'+id+'</span></label>'});html+='</div></div>'}body.innerHTML=html;document.getElementById('adToolsHint').textContent='当前 '+activeIds.length+' 个工具启用广告'}
+function toggleAllAdTools(on){document.querySelectorAll('.ad-tool-cb').forEach(cb=>{cb.checked=on})}
+function saveAdToolsFromCheckboxes(){const ids=[];document.querySelectorAll('.ad-tool-cb:checked').forEach(cb=>ids.push(cb.value));doSaveAdTools(ids)}
+function saveAdToolsFromTextarea(){const raw=document.getElementById('adToolsInput').value;const ids=raw.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);const invalid=ids.filter(id=>!/^[a-z0-9-]{1,64}$/.test(id));if(invalid.length){toast('无效 id: '+invalid.slice(0,3).join(', ')+(invalid.length>3?' ...':''),'error');return}doSaveAdTools(ids)}
+async function doSaveAdTools(ids){const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key:'ad_tools',value:JSON.stringify(ids)})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已保存 '+ids.length+' 个工具','success');document.getElementById('adToolsHint').textContent='当前 '+ids.length+' 个工具启用广告'}else{toast((d&&d.message)||'保存失败','error')}}
 function init(){loadStats();loadAppConfig();setInterval(loadStats,5000)}
 function syncThemeIcon(){document.getElementById('themeToggle').textContent=document.documentElement.dataset.theme==='dark'?'\u2600':'\u263D'}
 function toggleTheme(){const next=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=next;try{localStorage.setItem('admin-theme',next)}catch(e){}syncThemeIcon()}
