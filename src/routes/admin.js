@@ -504,6 +504,7 @@ input::placeholder,textarea::placeholder{color:var(--text-muted)}
       <a href="#" data-page="images"><span class="icon">&#9733;</span><span>图片管理</span></a>
       <a href="#" data-page="suggestions"><span class="icon">&#9998;</span><span>用户建议</span></a>
       <a href="#" data-page="syncdata"><span class="icon">&#8644;</span><span>同步数据</span></a>
+      <a href="#" data-page="ads"><span class="icon">&#9733;</span><span>工具广告</span></a>
       <a href="#" data-page="audit"><span class="icon">&#9783;</span><span>审计日志</span></a>
     </nav>
     <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="切换深色/浅色主题">&#9789;</button>
@@ -516,7 +517,7 @@ input::placeholder,textarea::placeholder{color:var(--text-muted)}
       <div class="table-wrap" style="margin-top:16px">
         <div class="toolbar"><h3>功能开关</h3><button onclick="loadAppConfig()">刷新</button></div>
         <div style="padding:20px" id="appConfigBody">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+          <div style="display:flex;align-items:center;gap:12px">
             <span style="font-size:14px;color:var(--text)">卡券 TAB</span>
             <label id="couponsTabSwitch" class="switch">
               <input type="checkbox" id="couponsTabCheck" style="display:none" onchange="toggleAppConfig('coupons_tab',this.checked?'1':'0')">
@@ -524,10 +525,6 @@ input::placeholder,textarea::placeholder{color:var(--text-muted)}
               <span id="couponsTabSlider" class="switch-knob"></span>
             </label>
             <span id="couponsTabLabel" class="switch-label"></span>
-          </div>
-          <div style="border-top:1px solid var(--border);padding-top:16px">
-            <div style="font-size:14px;color:var(--text);margin-bottom:8px;font-weight:600">广告工具（激励视频）</div>
-            <div id="adToolsBody" style="font-size:13px;color:var(--text-secondary)"></div>
           </div>
         </div>
       </div>
@@ -568,6 +565,12 @@ input::placeholder,textarea::placeholder{color:var(--text-muted)}
           <div class="toolbar"><h3 id="syncDetailTitle">用户数据</h3><button onclick="backToSyncUsers()" style="margin-right:8px">返回</button><button onclick="loadSyncDetail()">刷新</button></div>
           <table><thead><tr><th>scope</th><th>data_type</th><th>数据预览</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="syncDetailBody"></tbody></table>
         </div>
+      </div>
+    </div>
+    <div class="page" id="page-ads">
+      <div class="table-wrap">
+        <div class="toolbar"><h3>工具广告（激励视频）</h3><button onclick="loadAdToolsPage()">刷新</button></div>
+        <div style="padding:20px" id="adToolsBody"></div>
       </div>
     </div>
   </div>
@@ -693,10 +696,11 @@ async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syn
   '<td>'+fmtTime(it.updatedAt)+'</td>'+
   '<td><button onclick="syncDeleteItem(\\''+esc(it.scope)+'\\',\\''+esc(it.dataType)+'\\')" class="btn-danger" style="padding:4px 10px;font-size:12px">删除</button></td></tr>'}).join('')}
 async function syncDeleteItem(scope,dataType){if(!confirm('确定删除 '+scope+'/'+dataType+'？'))return;const r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope,data_type:dataType})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSyncDetail()}else{toast((d&&d.message)||'删除失败','error')}}
-document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='syncdata'){backToSyncUsers();loadSyncUsers()}if(a.dataset.page==='audit')loadAudit()}});
-async function loadAppConfig(){const d=await api('/app-config');if(!d)return;const checked=d.flags&&d.flags.coupons_tab!=='0';document.getElementById('couponsTabCheck').checked=checked;updateSwitchUI('couponsTab',checked);let ids=[];if(d.flags&&d.flags.ad_tools){try{ids=JSON.parse(d.flags.ad_tools);if(!Array.isArray(ids))ids=[]}catch{}}renderAdTools(ids)}
+document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='syncdata'){backToSyncUsers();loadSyncUsers()}if(a.dataset.page==='ads')loadAdToolsPage();if(a.dataset.page==='audit')loadAudit()}});
+async function loadAppConfig(){const d=await api('/app-config');if(!d)return;const checked=d.flags&&d.flags.coupons_tab!=='0';document.getElementById('couponsTabCheck').checked=checked;updateSwitchUI('couponsTab',checked)}
 function updateSwitchUI(prefix,checked){document.getElementById(prefix+'Switch').className=checked?'switch on':'switch';const l=document.getElementById(prefix+'Label');l.className=checked?'switch-label on':'switch-label';l.textContent=checked?'启用':'已关闭'}
 async function toggleAppConfig(key,value){const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key,value})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已更新','success');if(key==='coupons_tab'){updateSwitchUI('couponsTab',value==='1')}}else{toast((d&&d.message)||'更新失败','error');if(key==='coupons_tab'){const cb=document.getElementById('couponsTabCheck');cb.checked=!cb.checked;updateSwitchUI('couponsTab',cb.checked)}}}
+async function loadAdToolsPage(){let ids=[];const d=await api('/app-config');if(d&&d.flags&&d.flags.ad_tools){try{ids=JSON.parse(d.flags.ad_tools);if(!Array.isArray(ids))ids=[]}catch{}}renderAdTools(ids)}
 function renderAdTools(activeIds){const body=document.getElementById('adToolsBody');const active=new Set(activeIds);if(!TOOLS_CATALOG.length){body.innerHTML='<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">工具目录未同步，请在 lifetools 运行 <code>node scripts/export-tools-catalog.mjs</code></div><textarea id="adToolsInput" rows="4" style="width:100%;padding:10px;border:1px solid var(--border-input);border-radius:6px;font-size:13px;font-family:monospace;resize:vertical;background:var(--bg-input);color:var(--text-primary)" placeholder="wooden-fish&#10;ct-scan&#10;lottery"></textarea><div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button onclick="saveAdToolsFromTextarea()" style="padding:6px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">保存</button><span id="adToolsHint" style="font-size:12px;color:var(--text-muted)">当前 '+activeIds.length+' 个工具启用广告</span></div>';body.querySelector('#adToolsInput').value=activeIds.join('\n');return}let html='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><button onclick="toggleAllAdTools(true)" style="padding:4px 12px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer;font-size:12px">全选</button><button onclick="toggleAllAdTools(false)" style="padding:4px 12px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer;font-size:12px">清空</button><button onclick="saveAdToolsFromCheckboxes()" style="padding:4px 20px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">保存</button><span id="adToolsHint" style="font-size:12px;color:var(--text-muted)"></span></div>';const unknownIds=activeIds.filter(id=>!TOOLS_CATALOG.some(c=>c.tools.some(t=>t.id===id)));TOOLS_CATALOG.forEach(cat=>{html+='<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">'+cat.name+'</div><div style="display:flex;flex-wrap:wrap;gap:4px 12px">';cat.tools.forEach(t=>{const checked=active.has(t.id)?' checked':'';html+='<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;color:var(--text)"><input type="checkbox" class="ad-tool-cb" value="'+t.id+'"'+checked+'><span>'+t.icon+'</span><span>'+t.name+'</span><span style="font-size:11px;color:var(--text-muted);font-family:monospace">'+t.id+'</span></label>'});html+='</div></div>'});if(unknownIds.length){html+='<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:4px">未收录（'+unknownIds.length+' 个）</div><div style="display:flex;flex-wrap:wrap;gap:4px 12px">';unknownIds.forEach(id=>{html+='<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;color:var(--text)"><input type="checkbox" class="ad-tool-cb" value="'+id+'" checked><span style="font-family:monospace">'+id+'</span></label>'});html+='</div></div>'}body.innerHTML=html;document.getElementById('adToolsHint').textContent='当前 '+activeIds.length+' 个工具启用广告'}
 function toggleAllAdTools(on){document.querySelectorAll('.ad-tool-cb').forEach(cb=>{cb.checked=on})}
 function saveAdToolsFromCheckboxes(){const ids=[];document.querySelectorAll('.ad-tool-cb:checked').forEach(cb=>ids.push(cb.value));doSaveAdTools(ids)}
