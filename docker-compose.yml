@@ -2,8 +2,6 @@ services:
   mpserver:
     build: .
     container_name: mpserver
-    ports:
-      - "3000:3000"
     env_file:
       - .env
     volumes:
