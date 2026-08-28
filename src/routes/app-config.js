@@ -3,9 +3,9 @@ const { getDb, save } = require('../db')
 const { createLimiter } = require('../rate-limit')
 
 /**
- * 公开接口：客户端拉取应用级功能开关（卡券TAB、工具广告等）
+ * 公开接口：客户端拉取应用级功能开关（卡券TAB、工具广告、工具可见性等）
  * GET /api/app-config  无需认证，按 IP 限流
- * 响应：{ code:0, config:{ hiddenTabs:['coupons'], adTools:['wooden-fish'] } }
+ * 响应：{ code:0, config:{ hiddenTabs:[], adTools:[], hiddenTools:[] } }
  */
 const router = express.Router()
 
@@ -43,7 +43,18 @@ function getConfig() {
     } catch {}
   }
 
-  return { hiddenTabs, adTools }
+  // hiddenTools（需要隐藏的工具 id 列表，解析失败返回空数组）
+  let hiddenTools = []
+  if (merged.hidden_tools) {
+    try {
+      const parsed = JSON.parse(merged.hidden_tools)
+      if (Array.isArray(parsed)) {
+        hiddenTools = parsed.filter(id => typeof id === 'string' && /^[a-z0-9-]{1,64}$/.test(id)).slice(0, 200)
+      }
+    } catch {}
+  }
+
+  return { hiddenTabs, adTools, hiddenTools }
 }
 
 router.get('/', (req, res) => {
@@ -57,7 +68,7 @@ router.get('/', (req, res) => {
   } catch (e) {
     console.error('[app-config] error:', e)
     res.set('Access-Control-Allow-Origin', '*')
-    res.json({ code: 0, config: { hiddenTabs: [], adTools: [] } })
+    res.json({ code: 0, config: { hiddenTabs: [], adTools: [], hiddenTools: [] } })
   }
 })
 

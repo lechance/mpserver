@@ -374,6 +374,20 @@ router.post('/api/app-config', (req, res) => {
     } catch {
       return res.status(400).json({ code: 400, message: 'ad_tools 须为合法 JSON 数组' })
     }
+  } else if (key === 'hidden_tools') {
+    try {
+      const arr = JSON.parse(value)
+      if (!Array.isArray(arr) || arr.length > 200) {
+        return res.status(400).json({ code: 400, message: 'hidden_tools 须为数组且不超过 200 项' })
+      }
+      for (const id of arr) {
+        if (typeof id !== 'string' || !/^[a-z0-9-]{1,64}$/.test(id)) {
+          return res.status(400).json({ code: 400, message: `hidden_tools 工具 id 无效: ${String(id).slice(0, 32)}` })
+        }
+      }
+    } catch {
+      return res.status(400).json({ code: 400, message: 'hidden_tools 须为合法 JSON 数组' })
+    }
   } else {
     return res.status(400).json({ code: 400, message: '未知的 key' })
   }
@@ -382,7 +396,7 @@ router.post('/api/app-config', (req, res) => {
     'INSERT INTO app_config (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
     [key, value, Date.now()]
   )
-  const displayValue = key === 'ad_tools' ? (() => { try { return JSON.parse(value).length + ' 个工具' } catch { return value } })() : value
+  const displayValue = (key === 'ad_tools' || key === 'hidden_tools') ? (() => { try { return JSON.parse(value).length + ' 个工具' } catch { return value } })() : value
   db.run(
     'INSERT INTO audit_log (event, trace_id, detail, created_at) VALUES (?, ?, ?, ?)',
     ['app_config_change', null, `ip=${req.ip} key=${key} value=${displayValue}`, Date.now()]
@@ -505,6 +519,7 @@ input::placeholder,textarea::placeholder{color:var(--text-muted)}
       <a href="#" data-page="suggestions"><span class="icon">&#9998;</span><span>用户建议</span></a>
       <a href="#" data-page="syncdata"><span class="icon">&#8644;</span><span>同步数据</span></a>
       <a href="#" data-page="ads"><span class="icon">&#9733;</span><span>工具广告</span></a>
+      <a href="#" data-page="tools"><span class="icon">&#9881;</span><span>工具管理</span></a>
       <a href="#" data-page="audit"><span class="icon">&#9783;</span><span>审计日志</span></a>
     </nav>
     <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="切换深色/浅色主题">&#9789;</button>
@@ -571,6 +586,12 @@ input::placeholder,textarea::placeholder{color:var(--text-muted)}
       <div class="table-wrap">
         <div class="toolbar"><h3>工具广告（激励视频）</h3><button onclick="loadAdToolsPage()">刷新</button></div>
         <div style="padding:20px" id="adToolsBody"></div>
+      </div>
+    </div>
+    <div class="page" id="page-tools">
+      <div class="table-wrap">
+        <div class="toolbar"><h3>工具管理（客户端可见性）</h3><button onclick="loadToolsPage()">刷新</button></div>
+        <div style="padding:20px" id="toolsBody"></div>
       </div>
     </div>
   </div>
@@ -696,7 +717,7 @@ async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syn
   '<td>'+fmtTime(it.updatedAt)+'</td>'+
   '<td><button onclick="syncDeleteItem(\\''+esc(it.scope)+'\\',\\''+esc(it.dataType)+'\\')" class="btn-danger" style="padding:4px 10px;font-size:12px">删除</button></td></tr>'}).join('')}
 async function syncDeleteItem(scope,dataType){if(!confirm('确定删除 '+scope+'/'+dataType+'？'))return;const r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope,data_type:dataType})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSyncDetail()}else{toast((d&&d.message)||'删除失败','error')}}
-document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='syncdata'){backToSyncUsers();loadSyncUsers()}if(a.dataset.page==='ads')loadAdToolsPage();if(a.dataset.page==='audit')loadAudit()}});
+document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='syncdata'){backToSyncUsers();loadSyncUsers()}if(a.dataset.page==='ads')loadAdToolsPage();if(a.dataset.page==='tools')loadToolsPage();if(a.dataset.page==='audit')loadAudit()}});
 async function loadAppConfig(){const d=await api('/app-config');if(!d)return;const checked=d.flags&&d.flags.coupons_tab!=='0';document.getElementById('couponsTabCheck').checked=checked;updateSwitchUI('couponsTab',checked)}
 function updateSwitchUI(prefix,checked){document.getElementById(prefix+'Switch').className=checked?'switch on':'switch';const l=document.getElementById(prefix+'Label');l.className=checked?'switch-label on':'switch-label';l.textContent=checked?'启用':'已关闭'}
 async function toggleAppConfig(key,value){const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key,value})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已更新','success');if(key==='coupons_tab'){updateSwitchUI('couponsTab',value==='1')}}else{toast((d&&d.message)||'更新失败','error');if(key==='coupons_tab'){const cb=document.getElementById('couponsTabCheck');cb.checked=!cb.checked;updateSwitchUI('couponsTab',cb.checked)}}}
@@ -706,6 +727,12 @@ function toggleAllAdTools(on){document.querySelectorAll('.ad-tool-cb').forEach(c
 function saveAdToolsFromCheckboxes(){const ids=[];document.querySelectorAll('.ad-tool-cb:checked').forEach(cb=>ids.push(cb.value));doSaveAdTools(ids)}
 function saveAdToolsFromTextarea(){const raw=document.getElementById('adToolsInput').value;const ids=raw.split(/[\\n,]+/).map(s=>s.trim()).filter(Boolean);const invalid=ids.filter(id=>!/^[a-z0-9-]{1,64}$/.test(id));if(invalid.length){toast('无效 id: '+invalid.slice(0,3).join(', ')+(invalid.length>3?' ...':''),'error');return}doSaveAdTools(ids)}
 async function doSaveAdTools(ids){const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key:'ad_tools',value:JSON.stringify(ids)})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已保存 '+ids.length+' 个工具','success');document.getElementById('adToolsHint').textContent='当前 '+ids.length+' 个工具启用广告'}else{toast((d&&d.message)||'保存失败','error')}}
+async function loadToolsPage(){let ids=[];const d=await api('/app-config');if(d&&d.flags&&d.flags.hidden_tools){try{ids=JSON.parse(d.flags.hidden_tools);if(!Array.isArray(ids))ids=[]}catch{}}renderTools(ids)}
+function renderTools(hiddenIds){const body=document.getElementById('toolsBody');const hidden=new Set(hiddenIds);if(!TOOLS_CATALOG.length){body.innerHTML='<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">工具目录未同步，请在 lifetools 运行 <code>node scripts/export-tools-catalog.mjs</code></div><textarea id="toolsInput" rows="4" style="width:100%;padding:10px;border:1px solid var(--border-input);border-radius:6px;font-size:13px;font-family:monospace;resize:vertical;background:var(--bg-input);color:var(--text-primary)" placeholder="wooden-fish&#10;ct-scan&#10;lottery"></textarea><div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button onclick="saveToolsFromTextarea()" style="padding:6px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">保存</button><span id="toolsHint" style="font-size:12px;color:var(--text-muted)">当前 '+hiddenIds.length+' 个工具隐藏</span></div>';body.querySelector('#toolsInput').value=hiddenIds.join('\\n');return}let html='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><button onclick="toggleAllTools(true)" style="padding:4px 12px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer;font-size:12px">全选</button><button onclick="toggleAllTools(false)" style="padding:4px 12px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer;font-size:12px">清空</button><button onclick="saveToolsFromCheckboxes()" style="padding:4px 20px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">保存</button><span id="toolsHint" style="font-size:12px;color:var(--text-muted)"></span></div>';const unknownIds=hiddenIds.filter(id=>!TOOLS_CATALOG.some(c=>c.tools.some(t=>t.id===id)));TOOLS_CATALOG.forEach(cat=>{html+='<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">'+cat.name+'</div><div style="display:flex;flex-wrap:wrap;gap:4px 12px">';cat.tools.forEach(t=>{const checked=hidden.has(t.id)?' checked':'';html+='<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;color:var(--text)"><input type="checkbox" class="tool-hide-cb" value="'+t.id+'"'+checked+'><span>'+t.icon+'</span><span>'+t.name+'</span><span style="font-size:11px;color:var(--text-muted);font-family:monospace">'+t.id+'</span></label>'});html+='</div></div>'});if(unknownIds.length){html+='<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:4px">未收录（'+unknownIds.length+' 个）</div><div style="display:flex;flex-wrap:wrap;gap:4px 12px">';unknownIds.forEach(id=>{html+='<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;color:var(--text)"><input type="checkbox" class="tool-hide-cb" value="'+id+'" checked><span style="font-family:monospace">'+id+'</span></label>'});html+='</div></div>'}body.innerHTML=html;document.getElementById('toolsHint').textContent='当前 '+hiddenIds.length+' 个工具隐藏'}
+function toggleAllTools(on){document.querySelectorAll('.tool-hide-cb').forEach(cb=>{cb.checked=on})}
+function saveToolsFromCheckboxes(){const ids=[];document.querySelectorAll('.tool-hide-cb:checked').forEach(cb=>ids.push(cb.value));doSaveTools(ids)}
+function saveToolsFromTextarea(){const raw=document.getElementById('toolsInput').value;const ids=raw.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);const invalid=ids.filter(id=>!/^[a-z0-9-]{1,64}$/.test(id));if(invalid.length){toast('无效 id: '+invalid.slice(0,3).join(', ')+(invalid.length>3?' ...':''),'error');return}doSaveTools(ids)}
+async function doSaveTools(ids){const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key:'hidden_tools',value:JSON.stringify(ids)})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已保存 '+ids.length+' 个工具隐藏','success');document.getElementById('toolsHint').textContent='当前 '+ids.length+' 个工具隐藏'}else{toast((d&&d.message)||'保存失败','error')}}
 function init(){loadStats();loadAppConfig();setInterval(loadStats,5000)}
 function syncThemeIcon(){document.getElementById('themeToggle').textContent=document.documentElement.dataset.theme==='dark'?'\u2600':'\u263D'}
 function toggleTheme(){const next=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=next;try{localStorage.setItem('admin-theme',next)}catch(e){}syncThemeIcon()}
