@@ -30,9 +30,6 @@ router.post('/api/login', (req, res) => {
   if (!config.adminToken) {
     return res.status(401).json({ code: 401, message: '管理令牌未配置' })
   }
-  if (!loginLimiter(req.ip)) {
-    return res.status(429).json({ code: 429, message: '登录尝试过于频繁，请稍后再试' })
-  }
   const token = req.body && req.body.token
   if (token === config.adminToken) {
     const sessionId = createSession(req.ip, config.adminSessionExpiryMs)
@@ -49,7 +46,9 @@ router.post('/api/login', (req, res) => {
     } catch {}
     return res.json({ code: 0 })
   }
-  // 失败也记录（含 IP，便于排查暴力破解）
+  if (!loginLimiter(req.ip)) {
+    return res.status(429).json({ code: 429, message: '登录尝试过于频繁，请稍后再试' })
+  }
   try {
     const db = getDb()
     db.run(
@@ -627,7 +626,7 @@ function hdr(){return {'Content-Type':'application/json'}}
 function toast(msg,type='info'){const el=document.getElementById('toast');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.classList.remove('show'),3000)}
 function showLogin(){document.getElementById('loginWrap').style.display='flex';document.getElementById('appWrap').style.display='none'}
 function showApp(){document.getElementById('loginWrap').style.display='none';document.getElementById('appWrap').style.display='flex'}
-function doLogin(){const t=document.getElementById('tokenInput').value.trim();if(!t)return;fetch(BASE+'/login',{method:'POST',headers:hdr(),body:JSON.stringify({token:t})}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(()=>{showApp();init()}).catch(()=>{document.getElementById('loginErr').textContent='令牌无效';document.getElementById('loginErr').style.display='block'})}
+function doLogin(){const t=document.getElementById('tokenInput').value.trim();if(!t)return;fetch(BASE+'/login',{method:'POST',headers:hdr(),body:JSON.stringify({token:t})}).then(r=>r.json().then(d=>{if(!r.ok)throw d;return d})).then(()=>{showApp();init()}).catch(d=>{document.getElementById('loginErr').textContent=(d&&d.message)||'令牌无效';document.getElementById('loginErr').style.display='block'})}
 function doLogout(){fetch(BASE+'/logout',{method:'POST',headers:hdr()}).then(()=>{showLogin()}).catch(()=>{showLogin()})}
 async function api(path,method='GET'){const r=await fetch(BASE+path,{method,headers:hdr()});if(r.status===401){doLogout();return null}return r.json()}
 function fmtSize(b){if(b<1024)return b+'B';if(b<1048576)return(b/1024).toFixed(1)+'KB';return(b/1048576).toFixed(1)+'MB'}
@@ -731,7 +730,7 @@ async function loadToolsPage(){let ids=[];const d=await api('/app-config');if(d&
 function renderTools(hiddenIds){const body=document.getElementById('toolsBody');const hidden=new Set(hiddenIds);if(!TOOLS_CATALOG.length){body.innerHTML='<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">工具目录未同步，请在 lifetools 运行 <code>node scripts/export-tools-catalog.mjs</code></div><textarea id="toolsInput" rows="4" style="width:100%;padding:10px;border:1px solid var(--border-input);border-radius:6px;font-size:13px;font-family:monospace;resize:vertical;background:var(--bg-input);color:var(--text-primary)" placeholder="wooden-fish&#10;ct-scan&#10;lottery"></textarea><div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button onclick="saveToolsFromTextarea()" style="padding:6px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">保存</button><span id="toolsHint" style="font-size:12px;color:var(--text-muted)">当前 '+hiddenIds.length+' 个工具隐藏</span></div>';body.querySelector('#toolsInput').value=hiddenIds.join('\\n');return}let html='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><button onclick="toggleAllTools(true)" style="padding:4px 12px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer;font-size:12px">全选</button><button onclick="toggleAllTools(false)" style="padding:4px 12px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer;font-size:12px">清空</button><button onclick="saveToolsFromCheckboxes()" style="padding:4px 20px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">保存</button><span id="toolsHint" style="font-size:12px;color:var(--text-muted)"></span></div>';const unknownIds=hiddenIds.filter(id=>!TOOLS_CATALOG.some(c=>c.tools.some(t=>t.id===id)));TOOLS_CATALOG.forEach(cat=>{html+='<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:4px">'+cat.name+'</div><div style="display:flex;flex-wrap:wrap;gap:4px 12px">';cat.tools.forEach(t=>{const checked=hidden.has(t.id)?' checked':'';html+='<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;color:var(--text)"><input type="checkbox" class="tool-hide-cb" value="'+t.id+'"'+checked+'><span>'+t.icon+'</span><span>'+t.name+'</span><span style="font-size:11px;color:var(--text-muted);font-family:monospace">'+t.id+'</span></label>'});html+='</div></div>'});if(unknownIds.length){html+='<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:4px">未收录（'+unknownIds.length+' 个）</div><div style="display:flex;flex-wrap:wrap;gap:4px 12px">';unknownIds.forEach(id=>{html+='<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;color:var(--text)"><input type="checkbox" class="tool-hide-cb" value="'+id+'" checked><span style="font-family:monospace">'+id+'</span></label>'});html+='</div></div>'}body.innerHTML=html;document.getElementById('toolsHint').textContent='当前 '+hiddenIds.length+' 个工具隐藏'}
 function toggleAllTools(on){document.querySelectorAll('.tool-hide-cb').forEach(cb=>{cb.checked=on})}
 function saveToolsFromCheckboxes(){const ids=[];document.querySelectorAll('.tool-hide-cb:checked').forEach(cb=>ids.push(cb.value));doSaveTools(ids)}
-function saveToolsFromTextarea(){const raw=document.getElementById('toolsInput').value;const ids=raw.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);const invalid=ids.filter(id=>!/^[a-z0-9-]{1,64}$/.test(id));if(invalid.length){toast('无效 id: '+invalid.slice(0,3).join(', ')+(invalid.length>3?' ...':''),'error');return}doSaveTools(ids)}
+function saveToolsFromTextarea(){const raw=document.getElementById('toolsInput').value;const ids=raw.split(/[\\n,]+/).map(s=>s.trim()).filter(Boolean);const invalid=ids.filter(id=>!/^[a-z0-9-]{1,64}$/.test(id));if(invalid.length){toast('无效 id: '+invalid.slice(0,3).join(', ')+(invalid.length>3?' ...':''),'error');return}doSaveTools(ids)}
 async function doSaveTools(ids){const r=await fetch(BASE+'/app-config',{method:'POST',headers:hdr(),body:JSON.stringify({key:'hidden_tools',value:JSON.stringify(ids)})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast('已保存 '+ids.length+' 个工具隐藏','success');document.getElementById('toolsHint').textContent='当前 '+ids.length+' 个工具隐藏'}else{toast((d&&d.message)||'保存失败','error')}}
 function init(){loadStats();loadAppConfig();setInterval(loadStats,5000)}
 function syncThemeIcon(){document.getElementById('themeToggle').textContent=document.documentElement.dataset.theme==='dark'?'\u2600':'\u263D'}
