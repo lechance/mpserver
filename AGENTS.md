@@ -10,18 +10,19 @@ WeChat mini-program backend for image content-security (`mediaCheckAsync`, async
 
 ## Environment
 
-- `src/config.js` runs `require('dotenv').config()` at load time and reads `APPID`, `APPSECRET`, `PORT`, `MAX_IMAGE_SIZE`, `PUBLIC_BASE_URL`, `WX_MSG_TOKEN`, `WX_MSG_ENCODING_AES_KEY`, `SEC_CHECK_SCENE`, `UPLOAD_DIR`, `DEBUG`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS`, `SYNC_RATE_LIMIT_MAX`, `SYNC_RATE_LIMIT_WINDOW_MS`, `SUGGEST_RATE_LIMIT_MAX`, `SUGGEST_RATE_LIMIT_WINDOW_MS`, `ADMIN_RATE_LIMIT_MAX`, `ADMIN_RATE_LIMIT_WINDOW_MS`, `ADMIN_TOKEN`. `.env` is gitignored; only `.env.example` is committed.
+- `src/config.js` runs `require('dotenv').config()` at load time and reads `APPID`, `APPSECRET`, `PORT`, `MAX_IMAGE_SIZE`, `PUBLIC_BASE_URL`, `WX_MSG_TOKEN`, `WX_MSG_ENCODING_AES_KEY`, `SEC_CHECK_SCENE`, `UPLOAD_DIR`, `DEBUG`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS`, `SYNC_RATE_LIMIT_MAX`, `SYNC_RATE_LIMIT_WINDOW_MS`, `SUGGEST_RATE_LIMIT_MAX`, `SUGGEST_RATE_LIMIT_WINDOW_MS`, `ADMIN_RATE_LIMIT_MAX`, `ADMIN_RATE_LIMIT_WINDOW_MS`, `ADMIN_SESSION_EXPIRY_MS`, `ADMIN_TOKEN`. `.env` is gitignored; only `.env.example` is committed.
 - `DEBUG=true` enables verbose request logging middleware in `server.js` (method/path/status/duration/`trace_id`), submit success logs, and callback decrypt detail logs — useful for diagnosing async results that never arrive.
 - Submit is rate-limited per-IP (default 10/min via `src/rate-limit.js`); `server.js` sets `trust proxy` to 1 hop so `req.ip` works behind a single reverse proxy.
 - `APPID`/`APPSECRET`/`PUBLIC_BASE_URL` are required for real sec-check requests but **not** for `/health`. Without them, `POST /api/sec-check/image` returns 500 with `message: '服务未配置'`.
 - `WX_MSG_TOKEN`/`WX_MSG_ENCODING_AES_KEY` are needed for `/api/sec-check/callback` (WeChat message push); without them the callback returns 403.
 - docker-compose uses `env_file: .env`, so a local `.env` must exist before `docker compose up`. `uploads/` is a named Docker volume so stored images survive restarts. The Dockerfile runs as non-root user `app` and chowns `/app/uploads`; **pre-existing volumes** from before that change are root-owned → `EACCES` on submit (submit returns 500 `存储目录无写入权限`), fix with `docker exec -u root mpserver chown -R app:app /app/uploads`.
+- **The container has NO host port mapping** — it only attaches to the external Docker network `extnet` and is reachable solely through a reverse proxy on that network (TLS termination + `/admin` path). `docker ps` shows no published port; that is expected, not a bug.
 
 ## Runtime quirks
 
 - Requires Node >= 18 (uses global `fetch`, `crypto`, `FormData`, `Blob` directly — no undici/node-fetch/crypto dep). Dockerfile builds on `node:24-alpine` and runs `npm ci`.
 - Deps are `express`, `multer`, `dotenv`, `sql.js` only. Don't add packages for things Node globals already provide.
-- Storage is SQLite via `sql.js` (pure JS, no native build) persisted to `db/mpserver.db` — `src/db.js` loads at boot and does a synchronous `writeFileSync` export after every mutation. All three stores (`checks`, `audit_log`, `user_data`, plus `suggestions`) survive restarts. Rate-limiter Maps stay in memory; all of them (`submitLimiter`, `syncLimiter`, `suggestLimiter`, `loginLimiter`) are wired into the single `startCleanup` call in `server.js` for periodic prune. Uploaded files are no longer auto-cleaned (manual via admin dashboard); outbound WeChat fetches use `AbortController` timeouts via `src/http.js`. Admin sessions (`src/admin-session.js`) stay in memory and are pruned alongside limiters.
+- Storage is SQLite via `sql.js` (pure JS, no native build) persisted to `db/mpserver.db` — `src/db.js` loads at boot and does a synchronous `writeFileSync` export after every mutation. All stores (`checks`, `audit_log`, `user_data`, `suggestions`, `app_config`) survive restarts. Rate-limiter Maps stay in memory; all of them (`submitLimiter`, `syncLimiter`, `suggestLimiter`, `loginLimiter`) are wired into the single `startCleanup` call in `server.js` for periodic prune. Uploaded files are no longer auto-cleaned (manual via admin dashboard); outbound WeChat fetches use `AbortController` timeouts via `src/http.js`. Admin sessions (`src/admin-session.js`) stay in memory and are pruned alongside limiters.
 
 ## API contract (async flow)
 
@@ -60,7 +61,7 @@ Matches the mini program's 工具建议 page (`lifetools/src/pages/suggestion/in
 Public endpoint returning client-visible feature flags (currently: whether to hide tabs). **No identity**, per-IP rate limited (30/min). Response:
 
 ```json
-{ "code": 0, "config": { "hiddenTabs": ["coupons"] } }
+{ "code": 0, "config": { "hiddenTabs": ["coupons"], "adTools": ["wooden-fish"], "hiddenTools": [] } }
 ```
 
 Rows are stored in the `app_config` SQLite table (`key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER`). Known keys:
@@ -71,21 +72,28 @@ Rows are stored in the `app_config` SQLite table (`key TEXT PRIMARY KEY, value T
 
 CORS: `Access-Control-Allow-Origin: *` on this endpoint only (allows H5 browsers to fetch; mini-programs are unaffected).
 
-Admin endpoints (require `ADMIN_TOKEN`):
+Admin endpoints (require a valid `admin_session` cookie — see below, not a raw `ADMIN_TOKEN` in the request):
 - `GET /admin/api/app-config` → `{code:0, flags:{coupons_tab:'1'|'0'}}`
 - `POST /admin/api/app-config` body `{key:'coupons_tab', value:'0'|'1'}` or `{key:'ad_tools', value:'["tool-id"]'}` or `{key:'hidden_tools', value:'["tool-id"]'}` → `{code:0, message:'已更新'}` (writes `app_config` table + `audit_log` as `app_config_change`). Validation: `coupons_tab` value must be `'0'` or `'1'`; `ad_tools` and `hidden_tools` values must be valid JSON array of ≤200 items, each matching `/^[a-z0-9-]{1,64}$/`.
 
-Dashboard HTML includes a 功能开关 card: coupons tab toggle + tool checkboxes (ad tools grouped by category). The tool catalog is loaded from `src/tools-catalog.json` (generated by `lifetools/scripts/export-tools-catalog.mjs`). If missing, falls back to a textarea for manual id entry.
+Dashboard HTML: the 概览 page has a 功能开关 card with the coupons-tab toggle. `ad_tools` editing lives on its own **工具广告** menu page (checkboxes grouped by category from the tool catalog), and `hidden_tools` on **工具管理**. Both fall back to a manual-id textarea if `src/tools-catalog.json` (generated by `lifetools/scripts/export-tools-catalog.mjs`) is absent.
 
 ## Admin dashboard — sync data viewing (`/admin/api/sync-*`)
 
-The admin dashboard has a 同步数据 page for inspecting user cloud-synced data in the `user_data` table. Endpoints (all require `ADMIN_TOKEN`):
+The admin dashboard has a 同步数据 page for inspecting user cloud-synced data in the `user_data` table. Endpoints (all require a valid `admin_session` cookie):
 
-- `POST /admin/api/login` body `{ token }` → `{code:0}` — login endpoint (no prior auth needed). Rate-limited per IP (`ADMIN_RATE_LIMIT_MAX`/`ADMIN_RATE_LIMIT_WINDOW_MS`, default 5/15min). Creates an HttpOnly session cookie (IP-bound, `ADMIN_SESSION_EXPIRY_MS` default 8h). Logs success/failure to `audit_log` as `admin_login`/`admin_login_fail`.
+- `POST /admin/api/login` body `{ token }` → `{code:0}` — login endpoint (no prior auth needed). Rate-limited per IP (`ADMIN_RATE_LIMIT_MAX`/`ADMIN_RATE_LIMIT_WINDOW_MS`, default 5/15min) **but only failed attempts count** — successful logins are unlimited, so normal use never hits the limiter. Creates an HttpOnly session cookie (`Secure; SameSite=Strict; Path=/admin`, IP-bound, `ADMIN_SESSION_EXPIRY_MS` default 8h). Logs success/failure to `audit_log` as `admin_login`/`admin_login_fail`.
 - `POST /admin/api/logout` → `{code:0}` — destroys session, clears cookie. Logs `admin_logout`.
 - `GET /admin/api/sync-users` → `[{openid, entryCount, latestAt}]` — grouped by openid, ordered by latest sync time.
 - `GET /admin/api/sync-data?openid=xxx` → `{openid, items[{scope, dataType, data, updatedAt}]}` — all entries for a user, `data` is parsed JSON.
 - `POST /admin/api/sync-delete` body `{openid, scope, data_type}` → `{code:0, deleted:N}` — deletes a single entry.
+
+## Admin dashboard HTML (`DASHBOARD_HTML` in `src/routes/admin.js`)
+
+The entire admin UI (HTML + CSS + client JS) is **one backtick template literal** assigned to `DASHBOARD_HTML`. Two traps have caused repeated production-breaking bugs:
+
+- **Escape sequences are consumed by Node, not the browser.** Inside the template literal, `\n`/`\t`/`\'` become real characters before the browser receives them. Whenever the browser JS must see a literal backslash, double it (`\\n`, `\\'`). A single `\n` inside a JS string or regex here breaks the whole `<script>` (SyntaxError kills every handler, including `doLogin`), so a login that "silently fails" is often this. After any edit, extract the `<script>` and run `node --check` on it.
+- **Never hardcode colors — use CSS variables.** The UI has a dark theme via `:root` / `[data-theme=dark]` custom properties (set early by a `<head>` script; preference in `localStorage`, default follows `prefers-color-scheme`). All `style="..."` inline attributes and the `<style>` block must use `var(--xxx)`; adding a raw hex color silently breaks dark mode. The cookie is `Secure`, so the dashboard only works over HTTPS (via the proxy).
 
 ## WeChat message push (`/api/sec-check/callback`)
 
