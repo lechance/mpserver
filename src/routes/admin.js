@@ -496,6 +496,23 @@ table td button.btn-danger{border-color:var(--risk-border);background:var(--dang
 .switch-label.on{color:var(--success)}
 input::placeholder,textarea::placeholder{color:var(--text-muted)}
 @media(max-width:768px){.sidebar{width:60px}.sidebar .logo small,.sidebar nav a span{display:none}.sidebar nav a{justify-content:center;padding:12px}.sidebar .logo{font-size:14px;padding:0 0 12px;text-align:center}.main{margin-left:60px}}
+.sync-search{padding:7px 12px;border:1px solid var(--border-input);border-radius:6px;font-size:13px;background:var(--bg-input);color:var(--text-primary);outline:none;transition:border .3s;width:240px}
+.sync-search:focus{border-color:var(--accent)}
+.pagination{display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 16px;border-top:1px solid var(--border)}
+.pagination button{padding:4px 10px;border:1px solid var(--border-input);border-radius:4px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer;font-size:12px;min-width:28px}
+.pagination button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.pagination button:disabled{opacity:.35;cursor:default}
+.pagination button.page-active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.pagination .page-info{font-size:12px;color:var(--text-muted);margin:0 4px}
+.copy-btn{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border:1px solid var(--border-input);border-radius:4px;background:transparent;color:var(--text-muted);cursor:pointer;font-size:11px;margin-left:6px;vertical-align:middle}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.loading-row td{text-align:center;padding:40px;color:var(--text-muted)}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border-input);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.bulk-bar{display:none;align-items:center;gap:12px;padding:10px 16px;background:var(--pending-bg);border-top:1px solid var(--pending-border);font-size:13px;color:var(--text-primary)}
+.bulk-bar.show{display:flex}
+.openid-cell{font-family:monospace;font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;display:inline-block}
+.dm-header .copy-btn{font-size:12px;padding:3px 10px}
 </style>
 <script>(function(){var t='light';try{t=localStorage.getItem('admin-theme')||(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(e){}document.documentElement.dataset.theme=t})()</script>
 </head>
@@ -570,14 +587,30 @@ input::placeholder,textarea::placeholder{color:var(--text-muted)}
     <div class="page" id="page-syncdata">
       <div id="syncUsersView">
         <div class="table-wrap">
-          <div class="toolbar"><h3>已同步用户（按 openid 聚合）</h3><button onclick="loadSyncUsers()">刷新</button></div>
-          <table><thead><tr><th>openid</th><th>数据条数</th><th>最近同步</th><th>操作</th></tr></thead><tbody id="syncUsersBody"></tbody></table>
+          <div class="toolbar">
+            <h3>已同步用户（按 openid 聚合）</h3>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="text" class="sync-search" id="syncSearchInput" placeholder="搜索 openid..." oninput="filterSyncUsers()">
+              <button onclick="loadSyncUsers()">刷新</button>
+            </div>
+          </div>
+          <table><thead><tr><th style="width:40px"><input type="checkbox" id="syncUserCheckAll" onchange="toggleAllSyncUsers(this)"></th><th>openid</th><th>数据条数</th><th>最近同步</th><th>操作</th></tr></thead><tbody id="syncUsersBody"></tbody></table>
+          <div class="bulk-bar" id="syncUsersBulkBar"><span id="syncUsersBulkCount"></span><button onclick="bulkDeleteSyncUsers()" class="btn-danger">删除选中用户全部数据</button></div>
+          <div class="pagination" id="syncUsersPagination"></div>
         </div>
       </div>
       <div id="syncDetailView" style="display:none">
         <div class="table-wrap">
-          <div class="toolbar"><h3 id="syncDetailTitle">用户数据</h3><button onclick="backToSyncUsers()" style="margin-right:8px">返回</button><button onclick="loadSyncDetail()">刷新</button></div>
-          <table><thead><tr><th>scope</th><th>data_type</th><th>数据预览</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="syncDetailBody"></tbody></table>
+          <div class="toolbar">
+            <h3 id="syncDetailTitle">用户数据</h3>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="text" class="sync-search" id="syncDetailSearchInput" placeholder="搜索 scope / data_type..." oninput="filterSyncDetail()">
+              <button onclick="backToSyncUsers()" style="margin-right:8px">返回</button>
+              <button onclick="loadSyncDetail()">刷新</button>
+            </div>
+          </div>
+          <table><thead><tr><th style="width:40px"><input type="checkbox" id="syncEntryCheckAll" onchange="toggleAllSyncEntries(this)"></th><th>scope</th><th>data_type</th><th>数据预览</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="syncDetailBody"></tbody></table>
+          <div class="bulk-bar" id="syncDetailBulkBar"><span id="syncDetailBulkCount"></span><button onclick="bulkDeleteSyncEntries()" class="btn-danger">批量删除</button></div>
         </div>
       </div>
     </div>
@@ -614,6 +647,7 @@ input::placeholder,textarea::placeholder{color:var(--text-muted)}
       <span class="badge pending" id="dmScope"></span>
       <span class="dm-title" id="dmDataType"></span>
       <span class="dm-time" id="dmTime"></span>
+      <button class="copy-btn" onclick="copyDataModalContent()" style="margin-left:auto">复制</button>
     </div>
     <div class="dm-body"><pre id="dmContent"></pre></div>
   </div>
@@ -681,10 +715,10 @@ modalImg.addEventListener('touchend',dragEnd)
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(imgModal.classList.contains('show'))closeImg();else if(document.getElementById('dataModal').classList.contains('show'))closeDataModal()}})
 imgModal.addEventListener('click',e=>{if(e.target===imgModal)closeImg()})
 const dataModal=document.getElementById('dataModal')
-function showDataModal(scope,dataType,content,updatedAt){document.getElementById('dmScope').textContent=scope;document.getElementById('dmDataType').textContent=dataType;document.getElementById('dmContent').textContent=content;document.getElementById('dmTime').textContent=fmtTime(updatedAt);dataModal.classList.add('show')}
+function showDataModal(scope,dataType,content,updatedAt){document.getElementById('dmScope').textContent=scope;document.getElementById('dmDataType').textContent=dataType;var display=content;try{var obj=typeof content==='string'?JSON.parse(content):content;display=JSON.stringify(obj,null,2)}catch(e){}var el=document.getElementById('dmContent');el.textContent=display;highlightJson(el);document.getElementById('dmTime').textContent=fmtTime(updatedAt);dataModal.classList.add('show')}
 function closeDataModal(){dataModal.classList.remove('show')}
+function copyDataModalContent(){copyText(document.getElementById('dmContent').textContent)}
 dataModal.addEventListener('click',e=>{if(e.target===dataModal)closeDataModal()})
-document.getElementById('syncDetailBody').addEventListener('click',e=>{const td=e.target.closest('.data-preview');if(!td)return;showDataModal(td.dataset.scope,td.dataset.type,td.dataset.content,Number(td.dataset.time))})
 async function pruneImages(){const d=await api('/prune-images','POST');if(d)toast(d.message,'success');loadImages()}
 async function loadAudit(){const d=await api('/audit?limit=50');if(!d)return;const tb=document.getElementById('auditBody');if(!d.length){tb.innerHTML='<tr><td colspan="4" class="empty">暂无日志</td></tr>';return}tb.innerHTML=d.map(l=>{
   const evtMap={callback_pass:'推送-通过',callback_risky:'推送-违规',callback_error:'推送-异常',ignored_event:'忽略事件'}
@@ -701,21 +735,30 @@ async function loadSuggestions(){const d=await api('/suggestions?limit=100');if(
   '<td>'+fmtTime(s.createdAt)+'</td>'+
   '<td><button onclick="deleteSuggestion('+Number(s.id)+')">删除</button></td></tr>'}).join('')}
 async function deleteSuggestion(id){if(!confirm('确定删除该条建议？'))return;const r=await fetch(BASE+'/suggestion-delete',{method:'POST',headers:hdr(),body:JSON.stringify({id})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSuggestions()}else{toast((d&&d.message)||'删除失败','error')}}
-let syncCurrentOpenid=''
-async function loadSyncUsers(){const d=await api('/sync-users');if(!d)return;const tb=document.getElementById('syncUsersBody');if(!d.length){tb.innerHTML='<tr><td colspan="4" class="empty">暂无同步数据</td></tr>';return}tb.innerHTML=d.map(u=>{
-  return '<tr><td style="font-family:monospace;font-size:12px">'+esc(u.openid)+'</td>'+
-  '<td>'+u.entryCount+'</td>'+
-  '<td>'+fmtTime(u.latestAt)+'</td>'+
-  '<td><button onclick="loadSyncDetail(\\''+esc(u.openid)+'\\')">查看</button></td></tr>'}).join('')}
-function backToSyncUsers(){document.getElementById('syncUsersView').style.display='';document.getElementById('syncDetailView').style.display='none';syncCurrentOpenid=''}
-async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syncCurrentOpenid)return;document.getElementById('syncUsersView').style.display='none';document.getElementById('syncDetailView').style.display='';document.getElementById('syncDetailTitle').textContent='用户数据 - '+syncCurrentOpenid.slice(0,12)+'...';const d=await api('/sync-data?openid='+encodeURIComponent(syncCurrentOpenid));if(!d)return;const tb=document.getElementById('syncDetailBody');if(!d.items||!d.items.length){tb.innerHTML='<tr><td colspan="5" class="empty">该用户暂无数据</td></tr>';return}tb.innerHTML=d.items.map(it=>{
-  const preview=typeof it.data==='string'?it.data:JSON.stringify(it.data,null,2);const short=preview.length>80?preview.slice(0,80)+'\u2026':preview
-  return '<tr><td><span class="badge pending">'+esc(it.scope)+'</span></td>'+
-  '<td style="font-family:monospace;font-size:12px">'+esc(it.dataType)+'</td>'+
-  '<td class="data-preview" style="cursor:pointer" data-scope="'+esc(it.scope)+'" data-type="'+esc(it.dataType)+'" data-content="'+esc(preview)+'" data-time="'+Number(it.updatedAt)+'">'+esc(short)+'</td>'+
-  '<td>'+fmtTime(it.updatedAt)+'</td>'+
-  '<td><button onclick="syncDeleteItem(\\''+esc(it.scope)+'\\',\\''+esc(it.dataType)+'\\')" class="btn-danger" style="padding:4px 10px;font-size:12px">删除</button></td></tr>'}).join('')}
-async function syncDeleteItem(scope,dataType){if(!confirm('确定删除 '+scope+'/'+dataType+'？'))return;const r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope,data_type:dataType})});const d=await r.json().catch(()=>null);if(d&&d.code===0){toast(d.message,'success');loadSyncDetail()}else{toast((d&&d.message)||'删除失败','error')}}
+function copyText(text){navigator.clipboard.writeText(text).then(function(){toast('已复制','success')},function(){var ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('已复制','success')})}
+function highlightJson(el){var text=el.textContent;el.innerHTML=esc(text).replace(/("(?:[^"\\\\]|\\\\.)*")\s*:/g,'<span style="color:var(--accent)">$1</span>:').replace(/:\s*("(?:[^"\\\\]|\\\\.)*")/g,': <span style="color:var(--success)">$1</span>').replace(/:\s*(-?\d+\.?\d*(?:[eE][+-]?\d+)?)/g,': <span style="color:var(--danger)">$1</span>').replace(/:\s*(true|false|null)/g,': <span style="color:var(--pending-text)">$1</span>')}
+function computePageRange(cur,total){if(total<=7)return Array.from({length:total},function(_,i){return i+1});var pages=[1];if(cur>3)pages.push('...');for(var i=Math.max(2,cur-1);i<=Math.min(total-1,cur+1);i++)pages.push(i);if(cur<total-2)pages.push('...');pages.push(total);return pages}
+function renderPagination(containerId,current,totalPages,totalItems,onPage){var el=document.getElementById(containerId);if(totalPages<=1){el.innerHTML='';return}var html='<button '+(current<=1?'disabled':'')+' data-page="'+(current-1)+'">&laquo;</button>';var pages=computePageRange(current,totalPages);for(var i=0;i<pages.length;i++){var p=pages[i];if(p==='...')html+='<span class="page-info">...</span>';else html+='<button class="'+(p===current?'page-active':'')+'" data-page="'+p+'">'+p+'</button>'}html+='<button '+(current>=totalPages?'disabled':'')+' data-page="'+(current+1)+'">&raquo;</button>';html+='<span class="page-info">共 '+totalItems+' 项</span>';el.innerHTML=html;el.onclick=function(e){var btn=e.target.closest('button[data-page]');if(!btn||btn.disabled)return;onPage(Number(btn.dataset.page))}}
+var syncAllUsers=[],syncUsersPage=1,syncUsersPageSize=20,syncUsersSelected=new Set(),syncUsersSearchQuery=''
+var syncAllEntries=[],syncEntriesSelected=new Set(),syncDetailSearchQuery=''
+var _syncSearchTimer=null,_syncDetailSearchTimer=null
+function filterSyncUsers(){clearTimeout(_syncSearchTimer);_syncSearchTimer=setTimeout(function(){syncUsersSearchQuery=document.getElementById('syncSearchInput').value.trim();syncUsersPage=1;renderSyncUsers()},200)}
+function filterSyncDetail(){clearTimeout(_syncDetailSearchTimer);_syncDetailSearchTimer=setTimeout(function(){syncDetailSearchQuery=document.getElementById('syncDetailSearchInput').value.trim();renderSyncDetail()},200)}
+var syncCurrentOpenid=''
+async function loadSyncUsers(){var tb=document.getElementById('syncUsersBody');tb.innerHTML='<tr class="loading-row"><td colspan="5"><span class="spinner"></span>加载中...</td></tr>';syncUsersSelected.clear();syncUsersPage=1;syncUsersSearchQuery='';document.getElementById('syncSearchInput').value='';var d=await api('/sync-users');if(!d)return;syncAllUsers=d;renderSyncUsers()}
+function renderSyncUsers(){var tb=document.getElementById('syncUsersBody');var q=syncUsersSearchQuery.toLowerCase();var filtered=syncAllUsers;if(q)filtered=syncAllUsers.filter(function(u){return u.openid.toLowerCase().indexOf(q)!==-1});var total=filtered.length;var totalPages=Math.max(1,Math.ceil(total/syncUsersPageSize));if(syncUsersPage>totalPages)syncUsersPage=totalPages;var start=(syncUsersPage-1)*syncUsersPageSize;var page=filtered.slice(start,start+syncUsersPageSize);if(!page.length){tb.innerHTML='<tr><td colspan="5" class="empty">'+(q?'无匹配结果':'暂无同步数据')+'</td></tr>'}else{tb.innerHTML=page.map(function(u){var checked=syncUsersSelected.has(u.openid)?' checked':'';return '<tr><td><input type="checkbox" class="img-check sync-user-cb" data-openid="'+esc(u.openid)+'"'+checked+' onchange="toggleSyncUserSelect(this)"></td><td><span class="openid-cell">'+esc(u.openid)+'</span><button class="copy-btn" onclick="copyText(\\''+esc(u.openid)+'\\')">复制</button></td><td>'+u.entryCount+'</td><td>'+fmtTime(u.latestAt)+'</td><td><button onclick="loadSyncDetail(\\''+esc(u.openid)+'\\')">查看</button> <button onclick="deleteAllForUser(\\''+esc(u.openid)+'\\')" class="btn-danger" style="padding:4px 10px;font-size:12px">全部删除</button></td></tr>'}).join('')}var checkAll=document.getElementById('syncUserCheckAll');checkAll.checked=page.length>0&&page.every(function(u){return syncUsersSelected.has(u.openid)});var bulkBar=document.getElementById('syncUsersBulkBar');if(syncUsersSelected.size>0){bulkBar.classList.add('show');document.getElementById('syncUsersBulkCount').textContent='已选 '+syncUsersSelected.size+' 项'}else{bulkBar.classList.remove('show')}renderPagination('syncUsersPagination',syncUsersPage,totalPages,total,function(p){syncUsersPage=p;renderSyncUsers()})}
+function toggleSyncUserSelect(cb){var oid=cb.dataset.openid;if(cb.checked)syncUsersSelected.add(oid);else syncUsersSelected.delete(oid);var checkAll=document.getElementById('syncUserCheckAll');var visibleCbs=document.querySelectorAll('.sync-user-cb');checkAll.checked=visibleCbs.length>0&&Array.from(visibleCbs).every(function(c){return c.checked});renderSyncUsers()}
+function toggleAllSyncUsers(el){var visibleCbs=document.querySelectorAll('.sync-user-cb');visibleCbs.forEach(function(cb){cb.checked=el.checked;var oid=cb.dataset.openid;if(el.checked)syncUsersSelected.add(oid);else syncUsersSelected.delete(oid)});renderSyncUsers()}
+async function loadSyncDetail(openid){if(openid)syncCurrentOpenid=openid;if(!syncCurrentOpenid)return;document.getElementById('syncUsersView').style.display='none';document.getElementById('syncDetailView').style.display='';document.getElementById('syncDetailTitle').textContent='用户数据 - '+syncCurrentOpenid.slice(0,12)+'...';var tb=document.getElementById('syncDetailBody');tb.innerHTML='<tr class="loading-row"><td colspan="6"><span class="spinner"></span>加载中...</td></tr>';syncEntriesSelected.clear();syncDetailSearchQuery='';document.getElementById('syncDetailSearchInput').value='';var d=await api('/sync-data?openid='+encodeURIComponent(syncCurrentOpenid));if(!d)return;syncAllEntries=d.items||[];renderSyncDetail()}
+function renderSyncDetail(){var tb=document.getElementById('syncDetailBody');var q=syncDetailSearchQuery.toLowerCase();var filtered=syncAllEntries;if(q)filtered=syncAllEntries.filter(function(it){return it.scope.toLowerCase().indexOf(q)!==-1||it.dataType.toLowerCase().indexOf(q)!==-1});if(!filtered.length){tb.innerHTML='<tr><td colspan="6" class="empty">'+(q?'无匹配结果':'该用户暂无数据')+'</td></tr>';document.getElementById('syncDetailBulkBar').classList.remove('show');return}tb.innerHTML=filtered.map(function(it){var preview=typeof it.data==='string'?it.data:JSON.stringify(it.data,null,2);var short=preview.length>80?preview.slice(0,80)+'\u2026':preview;var key=it.scope+'|'+it.dataType;var checked=syncEntriesSelected.has(key)?' checked':'';return '<tr><td><input type="checkbox" class="img-check sync-entry-cb" data-key="'+esc(key)+'"'+checked+' onchange="toggleSyncEntrySelect(this)"></td><td><span class="badge pending">'+esc(it.scope)+'</span></td><td style="font-family:monospace;font-size:12px">'+esc(it.dataType)+'</td><td class="data-preview" style="cursor:pointer" data-scope="'+esc(it.scope)+'" data-type="'+esc(it.dataType)+'" data-content="'+esc(preview)+'" data-time="'+Number(it.updatedAt)+'">'+esc(short)+'</td><td>'+fmtTime(it.updatedAt)+'</td><td><button onclick="syncDeleteItem(\\''+esc(it.scope)+'\\',\\''+esc(it.dataType)+'\\')" class="btn-danger" style="padding:4px 10px;font-size:12px">删除</button></td></tr>'}).join('');var checkAll=document.getElementById('syncEntryCheckAll');checkAll.checked=filtered.length>0&&filtered.every(function(it){return syncEntriesSelected.has(it.scope+'|'+it.dataType)});var bulkBar=document.getElementById('syncDetailBulkBar');if(syncEntriesSelected.size>0){bulkBar.classList.add('show');document.getElementById('syncDetailBulkCount').textContent='已选 '+syncEntriesSelected.size+' 项'}else{bulkBar.classList.remove('show')}}
+function toggleSyncEntrySelect(cb){var key=cb.dataset.key;if(cb.checked)syncEntriesSelected.add(key);else syncEntriesSelected.delete(key);var checkAll=document.getElementById('syncEntryCheckAll');var visibleCbs=document.querySelectorAll('.sync-entry-cb');checkAll.checked=visibleCbs.length>0&&Array.from(visibleCbs).every(function(c){return c.checked});renderSyncDetail()}
+function toggleAllSyncEntries(el){var visibleCbs=document.querySelectorAll('.sync-entry-cb');visibleCbs.forEach(function(cb){cb.checked=el.checked;var key=cb.dataset.key;if(el.checked)syncEntriesSelected.add(key);else syncEntriesSelected.delete(key)});renderSyncDetail()}
+function backToSyncUsers(){document.getElementById('syncUsersView').style.display='';document.getElementById('syncDetailView').style.display='none';syncCurrentOpenid='';syncEntriesSelected.clear()}
+async function syncDeleteItem(scope,dataType){if(!confirm('确定删除 '+scope+'/'+dataType+'？'))return;var r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope:scope,data_type:dataType})});var d=await r.json().catch(function(){return null});if(d&&d.code===0){toast(d.message,'success');loadSyncDetail()}else{toast((d&&d.message)||'删除失败','error')}}
+async function deleteAllForUser(openid){if(!confirm('确定删除用户 '+openid.slice(0,12)+'... 的全部同步数据？'))return;var d=await api('/sync-data?openid='+encodeURIComponent(openid));if(!d||!d.items||!d.items.length){toast('该用户暂无数据','info');return}var deleted=0;for(var i=0;i<d.items.length;i++){var it=d.items[i];var r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:openid,scope:it.scope,data_type:it.dataType})});var res=await r.json().catch(function(){return null});if(res&&res.code===0)deleted+=(res.deleted||0)}toast('已删除 '+deleted+' 条记录','success');loadSyncUsers()}
+async function bulkDeleteSyncUsers(){if(!syncUsersSelected.size)return;var count=syncUsersSelected.size;if(!confirm('确定删除 '+count+ ' 个用户的全部同步数据？此操作不可撤销。'))return;var openids=Array.from(syncUsersSelected);var totalDeleted=0;var failed=0;toast('正在删除 '+openids.length+' 个用户...','info');for(var i=0;i<openids.length;i++){try{var d=await api('/sync-data?openid='+encodeURIComponent(openids[i]));if(d&&d.items){for(var j=0;j<d.items.length;j++){var it=d.items[j];var r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:openids[i],scope:it.scope,data_type:it.dataType})});var res=await r.json().catch(function(){return null});if(res&&res.code===0)totalDeleted+=(res.deleted||0);else failed++}}}catch(e){failed++}}toast('已删除 '+totalDeleted+' 条记录'+(failed?'，'+failed+' 条失败':''),totalDeleted>0?'success':'error');syncUsersSelected.clear();loadSyncUsers()}
+async function bulkDeleteSyncEntries(){if(!syncEntriesSelected.size)return;var keys=Array.from(syncEntriesSelected);if(!confirm('确定删除选中的 '+keys.length+' 条数据？'))return;var totalDeleted=0;for(var i=0;i<keys.length;i++){var parts=keys[i].split('|');var scope=parts[0],dataType=parts.slice(1).join('|');var r=await fetch(BASE+'/sync-delete',{method:'POST',headers:hdr(),body:JSON.stringify({openid:syncCurrentOpenid,scope:scope,data_type:dataType})});var res=await r.json().catch(function(){return null});if(res&&res.code===0)totalDeleted+=(res.deleted||0)}toast('已删除 '+totalDeleted+' 条记录','success');syncEntriesSelected.clear();loadSyncDetail()}
+document.getElementById('syncDetailBody').addEventListener('click',function(e){var td=e.target.closest('.data-preview');if(!td)return;showDataModal(td.dataset.scope,td.dataset.type,td.dataset.content,Number(td.dataset.time))})
 document.querySelectorAll('.sidebar nav a').forEach(a=>{a.onclick=e=>{e.preventDefault();document.querySelectorAll('.sidebar nav a').forEach(x=>x.classList.remove('active'));a.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+a.dataset.page).classList.add('active');if(a.dataset.page==='checks')loadChecks();if(a.dataset.page==='images')loadImages();if(a.dataset.page==='suggestions')loadSuggestions();if(a.dataset.page==='syncdata'){backToSyncUsers();loadSyncUsers()}if(a.dataset.page==='ads')loadAdToolsPage();if(a.dataset.page==='tools')loadToolsPage();if(a.dataset.page==='audit')loadAudit()}});
 async function loadAppConfig(){const d=await api('/app-config');if(!d)return;const checked=d.flags&&d.flags.coupons_tab!=='0';document.getElementById('couponsTabCheck').checked=checked;updateSwitchUI('couponsTab',checked)}
 function updateSwitchUI(prefix,checked){document.getElementById(prefix+'Switch').className=checked?'switch on':'switch';const l=document.getElementById(prefix+'Label');l.className=checked?'switch-label on':'switch-label';l.textContent=checked?'启用':'已关闭'}

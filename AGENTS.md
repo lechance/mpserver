@@ -22,7 +22,7 @@ WeChat mini-program backend for image content-security (`mediaCheckAsync`, async
 
 - Requires Node >= 18 (uses global `fetch`, `crypto`, `FormData`, `Blob` directly — no undici/node-fetch/crypto dep). Dockerfile builds on `node:24-alpine` and runs `npm ci`.
 - Deps are `express`, `multer`, `dotenv`, `sql.js` only. Don't add packages for things Node globals already provide.
-- Storage is SQLite via `sql.js` (pure JS, no native build) persisted to `db/mpserver.db` — `src/db.js` loads at boot and does a synchronous `writeFileSync` export after every mutation. All stores (`checks`, `audit_log`, `user_data`, `suggestions`, `app_config`) survive restarts. Rate-limiter Maps stay in memory; all of them (`submitLimiter`, `syncLimiter`, `suggestLimiter`, `loginLimiter`) are wired into the single `startCleanup` call in `server.js` for periodic prune. Uploaded files are no longer auto-cleaned (manual via admin dashboard); outbound WeChat fetches use `AbortController` timeouts via `src/http.js`. Admin sessions (`src/admin-session.js`) stay in memory and are pruned alongside limiters.
+- Storage is SQLite via `sql.js` (pure JS, no native build) persisted to `db/mpserver.db` — `src/db.js` loads at boot and does a synchronous `writeFileSync` export after every mutation. All stores (`checks`, `audit_log`, `user_data`, `suggestions`, `app_config`) survive restarts. Rate-limiter Maps and admin sessions stay in memory; all of them (`submitLimiter`, `syncLimiter`, `suggestLimiter`, `loginLimiter`, `pruneSessions`) are wired into the single `startCleanup` call in `server.js` for periodic prune. Uploaded files are **not** auto-cleaned (manual via admin dashboard); outbound WeChat fetches use `AbortController` timeouts via `src/http.js`.
 
 ## API contract (async flow)
 
