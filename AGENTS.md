@@ -88,12 +88,19 @@ The admin dashboard has a 同步数据 page for inspecting user cloud-synced dat
 - `GET /admin/api/sync-data?openid=xxx` → `{openid, items[{scope, dataType, data, updatedAt}]}` — all entries for a user, `data` is parsed JSON.
 - `POST /admin/api/sync-delete` body `{openid, scope, data_type}` → `{code:0, deleted:N}` — deletes a single entry.
 
-## Admin dashboard HTML (`DASHBOARD_HTML` in `src/routes/admin.js`)
+## Admin dashboard UI (`public/admin/`)
 
-The entire admin UI (HTML + CSS + client JS) is **one backtick template literal** assigned to `DASHBOARD_HTML`. Two traps have caused repeated production-breaking bugs:
+The admin UI is **three static files**, not a template literal: `public/admin/index.html` (markup), `admin.css` (design tokens + components), `admin.js` (all client logic). `src/routes/admin.js` mounts the directory with `express.static(ADMIN_PUBLIC_DIR, { index: false })` **before** `router.use(adminAuth)` so the login page can load its own CSS/JS without a session; `GET /admin/` explicitly `sendFile`s `index.html`. Static assets are mounted before auth on purpose — do not "fix" it by moving them behind `adminAuth`.
 
-- **Escape sequences are consumed by Node, not the browser.** Inside the template literal, `\n`/`\t`/`\'` become real characters before the browser receives them. Whenever the browser JS must see a literal backslash, double it (`\\n`, `\\'`). A single `\n` inside a JS string or regex here breaks the whole `<script>` (SyntaxError kills every handler, including `doLogin`), so a login that "silently fails" is often this. After any edit, extract the `<script>` and run `node --check` on it.
-- **Never hardcode colors — use CSS variables.** The UI has a dark theme via `:root` / `[data-theme=dark]` custom properties (set early by a `<head>` script; preference in `localStorage`, default follows `prefers-color-scheme`). All `style="..."` inline attributes and the `<style>` block must use `var(--xxx)`; adding a raw hex color silently breaks dark mode. The cookie is `Secure`, so the dashboard only works over HTTPS (via the proxy).
+Rules that keep this from regressing:
+
+- **Never build DOM with `innerHTML` for dynamic data.** Every value reaches the DOM through the `el()` builder in `admin.js`, which writes strings via `textContent`/`createTextNode`. Audit-log `detail` and suggestion `content` are attacker-influenced (they come from WeChat callbacks and mini-program submissions); string-concatenating them into HTML is exactly how XSS got in before. SVG icons come from a static `ICONS` map built with `createElementNS` — that is the only safe place for markup-like strings.
+- **Never hardcode colors — use CSS variables.** Dark theme is `:root` / `[data-theme=dark]` custom properties, applied by a `<head>` script from `localStorage` (default follows `prefers-color-scheme`). Colors, shadows, radii and spacing are all tokens in `admin.css`; a raw hex silently breaks dark mode. The session cookie is `Secure`, so the dashboard only works over HTTPS (via the proxy), which also means you cannot log in over plain `http://localhost`.
+- **The tool catalog is fetched, not inlined.** `GET /admin/api/tools-catalog` (behind `adminAuth`) returns `src/tools-catalog.json` and the client maps tool ids → 中文名. Node no longer interpolates anything into the page.
+- **No native `confirm()`/`alert()`.** Use `confirmDialog()` (Promise-based, focus-trapped) and `toast()`. Native dialogs are untestable and break the visual language.
+- **Table rendering goes through `createTable()`** (`columns`, `sort`, `pageSize`, `empty`). Sorting/pagination/empty/loading states live there; column order must match the `<th>` order in the HTML.
+
+Verification: `node --check public/admin/admin.js` after any edit. For deeper checks, load `index.html` + `admin.js` in jsdom (install it ad hoc, it is **not** a project dependency) with a stubbed `fetch`, then assert: init reaches the app view, each page renders rows, an XSS payload in `detail`/`content` appears as text with zero injected nodes, and `confirm()` is never called.
 
 ## WeChat message push (`/api/sec-check/callback`)
 

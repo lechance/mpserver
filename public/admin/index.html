@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="color-scheme" content="light dark">
+<title>治点工具箱 · 管理后台</title>
+<link rel="stylesheet" href="./admin.css">
+<script>
+  // 主题在首屏前应用，避免闪白/闪黑
+  (function () {
+    var t = 'light'
+    try {
+      t = localStorage.getItem('admin-theme') ||
+        (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    } catch (e) {}
+    document.documentElement.dataset.theme = t
+  })()
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">跳转到主要内容</a>
+
+<!-- ============ 登录 ============ -->
+<main class="login" id="loginView">
+  <div class="login__card">
+    <div class="login__brand">
+      <span class="login__mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </span>
+      <div>
+        <h1 class="login__title">治点工具箱</h1>
+        <p class="login__subtitle">内容安全管理后台</p>
+      </div>
+    </div>
+
+    <form class="login__form" id="loginForm" novalidate>
+      <div class="field">
+        <label class="field__label" for="tokenInput">管理令牌</label>
+        <input class="input" id="tokenInput" name="token" type="password"
+               placeholder="请输入 ADMIN_TOKEN" autocomplete="current-password"
+               spellcheck="false" autofocus required>
+      </div>
+      <p class="alert alert--danger" id="loginError" role="alert" hidden></p>
+      <button class="btn btn--primary btn--block" type="submit" id="loginBtn">
+        <span class="btn__spinner" aria-hidden="true"></span>
+        <span class="btn__label">登 录</span>
+      </button>
+    </form>
+
+    <p class="login__hint">令牌由服务端 <code>ADMIN_TOKEN</code> 环境变量配置，连续失败会触发 IP 限流。</p>
+  </div>
+</main>
+
+<!-- ============ 主体 ============ -->
+<div class="app" id="appView" hidden>
+  <!-- 侧边导航 -->
+  <aside class="sidebar" id="sidebar" aria-label="主导航">
+    <div class="sidebar__brand">
+      <span class="sidebar__mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </span>
+      <span class="sidebar__name">治点工具箱</span>
+    </div>
+
+    <nav class="sidebar__nav" id="sidebarNav">
+      <p class="sidebar__group">监控</p>
+      <a class="navlink" href="#dashboard" data-page="dashboard" data-title="系统概览" data-subtitle="服务运行状态与统计数据">
+        <svg class="navlink__icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+        <span class="navlink__text">概览</span>
+      </a>
+      <a class="navlink" href="#checks" data-page="checks" data-title="检测记录" data-subtitle="最近的内容安全检测流水">
+        <svg class="navlink__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span class="navlink__text">检测记录</span>
+      </a>
+      <a class="navlink" href="#images" data-page="images" data-title="图片管理" data-subtitle="小程序上传并落盘的图片">
+        <svg class="navlink__icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        <span class="navlink__text">图片管理</span>
+      </a>
+      <a class="navlink" href="#audit" data-page="audit" data-title="审计日志" data-subtitle="后台操作与推送事件留痕">
+        <svg class="navlink__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        <span class="navlink__text">审计日志</span>
+      </a>
+
+      <p class="sidebar__group">运营</p>
+      <a class="navlink" href="#suggestions" data-page="suggestions" data-title="用户建议" data-subtitle="小程序「工具建议」页提交内容">
+        <svg class="navlink__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span class="navlink__text">用户建议</span>
+      </a>
+      <a class="navlink" href="#syncdata" data-page="syncdata" data-title="同步数据" data-subtitle="用户工具数据的云端备份">
+        <svg class="navlink__icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        <span class="navlink__text">同步数据</span>
+      </a>
+      <a class="navlink" href="#ads" data-page="ads" data-title="工具广告" data-subtitle="配置展示激励视频广告的工具">
+        <svg class="navlink__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+        <span class="navlink__text">工具广告</span>
+      </a>
+      <a class="navlink" href="#tools" data-page="tools" data-title="工具管理" data-subtitle="控制工具在客户端的可见性">
+        <svg class="navlink__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+        <span class="navlink__text">工具管理</span>
+      </a>
+    </nav>
+
+    <div class="sidebar__foot">
+      <button class="btn btn--subtle btn--block" type="button" id="themeToggle">
+        <svg class="btn__icon theme-icon--dark" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="btn__icon theme-icon--light" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <span class="btn__label" id="themeToggleLabel">深色模式</span>
+      </button>
+      <button class="btn btn--danger-soft btn--block" type="button" id="logoutBtn">
+        <svg class="btn__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>
+        <span class="btn__label">退出登录</span>
+      </button>
+    </div>
+  </aside>
+
+  <div class="content">
+    <header class="topbar">
+      <div class="topbar__heading">
+        <h1 class="topbar__title" id="pageTitle">系统概览</h1>
+        <p class="topbar__subtitle" id="pageSubtitle">服务运行状态与统计数据</p>
+      </div>
+
+      <div class="topbar__actions">
+        <span class="topbar__meta" id="lastUpdated" aria-live="polite"></span>
+        <button class="btn btn--subtle" type="button" id="refreshBtn">
+          <svg class="btn__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6"/></svg>
+          <span class="btn__label">刷新</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="main" id="main" tabindex="-1">
+
+      <!-- 概览 -->
+      <section class="page" id="page-dashboard" data-page="dashboard" aria-labelledby="pageTitle">
+        <div class="stat-grid" id="statGrid"></div>
+
+        <div class="grid grid--2">
+          <section class="card">
+            <header class="card__head">
+              <div>
+                <h2 class="card__title">运行环境</h2>
+                <p class="card__desc">当前进程与配置摘要</p>
+              </div>
+              <button class="btn btn--subtle btn--sm" type="button" id="refreshTokenBtn">
+                <svg class="btn__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 3v6h-6"/></svg>
+                <span class="btn__label">刷新 Token</span>
+              </button>
+            </header>
+            <div class="card__body"><dl class="kv" id="envList"></dl></div>
+          </section>
+
+          <section class="card">
+            <header class="card__head">
+              <div>
+                <h2 class="card__title">功能开关</h2>
+                <p class="card__desc">即时生效，客户端下次拉取配置时同步</p>
+              </div>
+              <button class="btn btn--subtle btn--sm" type="button" id="reloadConfigBtn">
+                <span class="btn__label">重新加载</span>
+              </button>
+            </header>
+            <div class="card__body" id="featureFlags"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- 检测记录 -->
+      <section class="page" id="page-checks" data-page="checks" aria-labelledby="pageTitle" hidden>
+        <section class="card">
+          <header class="card__head">
+            <div>
+              <h2 class="card__title">最近检测记录</h2>
+              <p class="card__desc">按创建时间倒序，最多展示 50 条</p>
+            </div>
+            <div class="card__actions">
+              <button class="btn btn--danger-soft btn--sm" type="button" id="clearChecksBtn">
+                <svg class="btn__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+                <span class="btn__label">清空记录</span>
+              </button>
+              <button class="btn btn--subtle btn--sm" type="button" data-refresh="checks">
+                <span class="btn__label">刷新</span>
+              </button>
+            </div>
+          </header>
+          <div class="table-scroll">
+            <table class="data-table" id="checksTable">
+              <caption class="sr-only">最近的内容安全检测记录</caption>
+              <thead><tr>
+                <th scope="col" class="col-thumb">预览</th>
+                <th scope="col">状态</th>
+                <th scope="col">trace_id</th>
+                <th scope="col">时间</th>
+              </tr></thead>
+              <tbody id="checksBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- 图片管理 -->
+      <section class="page" id="page-images" data-page="images" aria-labelledby="pageTitle" hidden>
+        <section class="card">
+          <header class="card__head">
+            <div>
+              <h2 class="card__title">已存储图片</h2>
+              <p class="card__desc">检测期间临时落盘，可手动清理</p>
+            </div>
+            <div class="card__actions">
+              <button class="btn btn--danger btn--sm" type="button" id="deleteImagesBtn" disabled>
+                <span class="btn__label">删除选中</span>
+              </button>
+              <button class="btn btn--subtle btn--sm" type="button" id="pruneImagesBtn">
+                <span class="btn__label">清理 24h 前</span>
+              </button>
+              <button class="btn btn--subtle btn--sm" type="button" data-refresh="images">
+                <span class="btn__label">刷新</span>
+              </button>
+            </div>
+          </header>
+          <div class="table-scroll">
+            <table class="data-table" id="imagesTable">
+              <caption class="sr-only">已上传并存储的图片列表</caption>
+              <thead><tr>
+                <th scope="col" class="col-check">
+                  <input class="checkbox" type="checkbox" id="imageCheckAll" aria-label="全选本页图片">
+                </th>
+                <th scope="col" class="col-thumb">预览</th>
+                <th scope="col">文件名</th>
+                <th scope="col">大小</th>
+                <th scope="col">修改时间</th>
+              </tr></thead>
+              <tbody id="imagesBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- 审计日志 -->
+      <section class="page" id="page-audit" data-page="audit" aria-labelledby="pageTitle" hidden>
+        <section class="card">
+          <header class="card__head">
+            <div>
+              <h2 class="card__title">审计日志</h2>
+              <p class="card__desc">后台操作、配置变更与推送事件</p>
+            </div>
+            <div class="card__actions">
+              <button class="btn btn--subtle btn--sm" type="button" data-refresh="audit">
+                <span class="btn__label">刷新</span>
+              </button>
+            </div>
+          </header>
+          <div class="table-scroll">
+            <table class="data-table" id="auditTable">
+              <caption class="sr-only">系统审计日志</caption>
+              <thead><tr>
+                <th scope="col">时间</th>
+                <th scope="col">事件</th>
+                <th scope="col">trace_id</th>
+                <th scope="col">详情</th>
+              </tr></thead>
+              <tbody id="auditBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- 用户建议 -->
+      <section class="page" id="page-suggestions" data-page="suggestions" aria-labelledby="pageTitle" hidden>
+        <section class="card">
+          <header class="card__head">
+            <div>
+              <h2 class="card__title">用户建议</h2>
+              <p class="card__desc">来自小程序「工具建议」页的提交</p>
+            </div>
+            <div class="card__actions">
+              <button class="btn btn--subtle btn--sm" type="button" data-refresh="suggestions">
+                <span class="btn__label">刷新</span>
+              </button>
+            </div>
+          </header>
+          <div class="table-scroll">
+            <table class="data-table" id="suggestionsTable">
+              <caption class="sr-only">用户提交的工具建议</caption>
+              <thead><tr>
+                <th scope="col">类型</th>
+                <th scope="col">相关工具</th>
+                <th scope="col">内容</th>
+                <th scope="col">时间</th>
+                <th scope="col" class="col-actions">操作</th>
+              </tr></thead>
+              <tbody id="suggestionsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- 同步数据 -->
+      <section class="page" id="page-syncdata" data-page="syncdata" aria-labelledby="pageTitle" hidden>
+        <div id="syncUsersView">
+          <section class="card">
+            <header class="card__head">
+              <div>
+                <h2 class="card__title">已同步用户</h2>
+                <p class="card__desc">按 openid 聚合的云端备份数据</p>
+              </div>
+              <div class="card__actions">
+                <div class="search">
+                  <svg class="search__icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                  <input class="input input--search" type="search" id="syncUserSearch" placeholder="搜索 openid…" aria-label="搜索 openid">
+                </div>
+                <button class="btn btn--subtle btn--sm" type="button" data-refresh="syncUsers">
+                  <span class="btn__label">刷新</span>
+                </button>
+              </div>
+            </header>
+            <div class="table-scroll">
+              <table class="data-table" id="syncUsersTable">
+                <caption class="sr-only">已同步用户列表</caption>
+                <thead><tr>
+                  <th scope="col" class="col-check">
+                    <input class="checkbox" type="checkbox" id="syncUserCheckAll" aria-label="全选本页用户">
+                  </th>
+                  <th scope="col">openid</th>
+                  <th scope="col">数据条数</th>
+                  <th scope="col">最近同步</th>
+                  <th scope="col" class="col-actions">操作</th>
+                </tr></thead>
+                <tbody id="syncUsersBody"></tbody>
+              </table>
+            </div>
+            <div class="bulkbar" id="syncUsersBulkBar" hidden>
+              <span class="bulkbar__count" id="syncUsersBulkCount"></span>
+              <div class="bulkbar__actions">
+                <button class="btn btn--ghost btn--sm" type="button" id="syncUsersClearSel">取消选择</button>
+                <button class="btn btn--danger btn--sm" type="button" id="syncUsersBulkDelete">删除选中用户数据</button>
+              </div>
+            </div>
+            <div class="pagination" id="syncUsersPagination"></div>
+          </section>
+        </div>
+
+        <div id="syncDetailView" hidden>
+          <section class="card">
+            <header class="card__head">
+              <div>
+                <h2 class="card__title" id="syncDetailTitle">用户数据</h2>
+                <p class="card__desc" id="syncDetailSubtitle"></p>
+              </div>
+              <div class="card__actions">
+                <div class="search">
+                  <svg class="search__icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                  <input class="input input--search" type="search" id="syncDetailSearch" placeholder="搜索 scope / data_type…" aria-label="搜索 scope 或 data_type">
+                </div>
+                <button class="btn btn--subtle btn--sm" type="button" id="syncDetailBack">
+                  <svg class="btn__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>
+                  <span class="btn__label">返回</span>
+                </button>
+                <button class="btn btn--subtle btn--sm" type="button" id="syncDetailRefresh">
+                  <span class="btn__label">刷新</span>
+                </button>
+              </div>
+            </header>
+            <div class="table-scroll">
+              <table class="data-table" id="syncDetailTable">
+                <caption class="sr-only">指定用户的数据条目</caption>
+                <thead><tr>
+                  <th scope="col" class="col-check">
+                    <input class="checkbox" type="checkbox" id="syncEntryCheckAll" aria-label="全选本页数据条目">
+                  </th>
+                  <th scope="col">scope</th>
+                  <th scope="col">data_type</th>
+                  <th scope="col">数据预览</th>
+                  <th scope="col">更新时间</th>
+                  <th scope="col" class="col-actions">操作</th>
+                </tr></thead>
+                <tbody id="syncDetailBody"></tbody>
+              </table>
+            </div>
+            <div class="bulkbar" id="syncDetailBulkBar" hidden>
+              <span class="bulkbar__count" id="syncDetailBulkCount"></span>
+              <div class="bulkbar__actions">
+                <button class="btn btn--ghost btn--sm" type="button" id="syncEntriesClearSel">取消选择</button>
+                <button class="btn btn--danger btn--sm" type="button" id="syncEntriesBulkDelete">批量删除</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- 工具广告 -->
+      <section class="page" id="page-ads" data-page="ads" aria-labelledby="pageTitle" hidden>
+        <section class="card">
+          <header class="card__head">
+            <div>
+              <h2 class="card__title">工具广告</h2>
+              <p class="card__desc">勾选后在工具页展示激励视频广告入口</p>
+            </div>
+            <div class="card__actions">
+              <button class="btn btn--subtle btn--sm" type="button" data-refresh="ads">
+                <span class="btn__label">刷新</span>
+              </button>
+            </div>
+          </header>
+          <div class="card__body" id="adsBody"></div>
+        </section>
+      </section>
+
+      <!-- 工具管理 -->
+      <section class="page" id="page-tools" data-page="tools" aria-labelledby="pageTitle" hidden>
+        <section class="card">
+          <header class="card__head">
+            <div>
+              <h2 class="card__title">工具管理</h2>
+              <p class="card__desc">勾选的工具将在客户端隐藏</p>
+            </div>
+            <div class="card__actions">
+              <button class="btn btn--subtle btn--sm" type="button" data-refresh="tools">
+                <span class="btn__label">刷新</span>
+              </button>
+            </div>
+          </header>
+          <div class="card__body" id="toolsBody"></div>
+        </section>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ============ 图片查看器 ============ -->
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="图片查看器" hidden>
+  <button class="lightbox__close btn btn--icon btn--on-dark" type="button" id="lightboxClose" aria-label="关闭">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+  </button>
+  <div class="lightbox__stage" id="lightboxStage">
+    <img id="lightboxImg" alt="" draggable="false">
+  </div>
+  <div class="lightbox__bar" role="group" aria-label="缩放控制">
+    <button class="btn btn--icon btn--on-dark" type="button" id="zoomOut" aria-label="缩小">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+    </button>
+    <output class="lightbox__level" id="zoomLevel" aria-live="off">100%</output>
+    <button class="btn btn--icon btn--on-dark" type="button" id="zoomIn" aria-label="放大">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <span class="lightbox__sep" aria-hidden="true"></span>
+    <button class="btn btn--on-dark btn--sm" type="button" id="zoomReset">1:1</button>
+  </div>
+</div>
+
+<!-- ============ 数据详情 ============ -->
+<div class="modal" id="dataModal" role="dialog" aria-modal="true" aria-labelledby="dataModalTitle" hidden>
+  <div class="modal__panel modal__panel--wide">
+    <header class="modal__head">
+      <span class="badge badge--neutral" id="dataModalScope"></span>
+      <h2 class="modal__title" id="dataModalTitle"></h2>
+      <span class="modal__meta" id="dataModalTime"></span>
+      <button class="btn btn--ghost btn--icon modal__close" type="button" data-close="dataModal" aria-label="关闭">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </header>
+    <div class="modal__body" id="dataModalBody"></div>
+    <footer class="modal__foot">
+      <button class="btn btn--subtle btn--sm" type="button" id="dataModalCopy">
+        <svg class="btn__icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        <span class="btn__label">复制原始数据</span>
+      </button>
+      <button class="btn btn--primary btn--sm" type="button" data-close="dataModal">关闭</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ============ 确认弹窗 ============ -->
+<div class="modal modal--center" id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage" hidden>
+  <div class="modal__panel modal__panel--sm">
+    <header class="modal__head modal__head--plain">
+      <h2 class="modal__title" id="confirmTitle">确认操作</h2>
+    </header>
+    <div class="modal__body"><p class="modal__text" id="confirmMessage"></p></div>
+    <footer class="modal__foot modal__foot--end">
+      <button class="btn btn--subtle" type="button" id="confirmCancel">取消</button>
+      <button class="btn btn--danger" type="button" id="confirmOk">确定</button>
+    </footer>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack" role="region" aria-label="通知" aria-live="polite"></div>
+
+<script src="./admin.js"></script>
+</body>
+</html>

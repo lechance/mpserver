@@ -122,20 +122,33 @@ docker compose up -d --build
 
 访问 `https://你的域名/admin` 进入 Web 管理面板（需要 `ADMIN_TOKEN` 环境变量）。
 
+前端资源位于 `public/admin/`：`index.html`（结构）、`admin.css`（设计令牌与组件）、`admin.js`（交互逻辑），由服务端以静态文件托管。改 UI 只需改这三个文件，无需重启 Node 之外的任何构建流程。
+
 功能：
-- **概览**：系统运行状态、内存使用、检测统计、图片存储
-- **检测记录**：最近 50 条检测记录，含图片预览、状态徽章、trace_id
-- **图片管理**：已存储图片列表，支持手动清理过期文件
+- **概览**：运行状态、内存、检测统计、图片存储、运行环境配置、功能开关
+- **检测记录**：最近 50 条，含缩略图预览、状态徽章、trace_id 复制，支持按状态/时间排序
+- **图片管理**：列表多选删除、一键清理 24 小时前的文件，支持按文件名/大小/时间排序
+- **审计日志**：后台操作、配置变更、推送事件留痕
+- **用户建议**：小程序提交的建议，支持删除
+- **同步数据**：按 openid 浏览用户云端备份，支持搜索、分页、批量删除与结构化预览
+- **工具广告 / 工具管理**：按分类勾选工具，配置激励视频广告与客户端可见性
 
-登录方式：浏览器打开 `/admin`，输入管理令牌登录。支持 `?token=xxx` URL 参数直接访问。
+登录方式：浏览器打开 `/admin`，输入管理令牌登录，服务端下发 `admin_session` HttpOnly Cookie（绑定 IP，8 小时有效）。令牌不出现在 URL 或请求头中。
 
-API 端点（均需 Bearer token 认证）：
-- `GET /admin/api/stats` — 系统统计
+API 端点（均需 `admin_session` Cookie 认证，登录接口除外）：
+- `POST /admin/api/login` / `POST /admin/api/logout` — 登录 / 登出
+- `GET /admin/api/stats` — 系统统计与运行环境
 - `GET /admin/api/checks` — 检测记录列表
 - `GET /admin/api/images` — 图片列表
+- `POST /admin/api/delete-images` — 删除指定图片
 - `POST /admin/api/clear-store` — 清空结果存储
 - `POST /admin/api/prune-images` — 清理过期图片
 - `POST /admin/api/refresh-token` — 刷新 access_token
+- `GET /admin/api/audit` — 审计日志
+- `GET /admin/api/suggestions` / `POST /admin/api/suggestion-delete` — 用户建议
+- `GET /admin/api/sync-users` / `GET /admin/api/sync-data` / `POST /admin/api/sync-delete` — 同步数据
+- `GET /admin/api/tools-catalog` — 工具目录（供后台把工具 id 显示为中文名）
+- `GET /admin/api/app-config` / `POST /admin/api/app-config` — 客户端功能开关
 
 ## 注意事项
 
