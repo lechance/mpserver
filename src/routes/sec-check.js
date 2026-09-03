@@ -11,17 +11,23 @@ const ALLOWED_MIME = {
   'image/png': { ext: 'png' },
   'image/jpeg': { ext: 'jpg' },
   'image/gif': { ext: 'gif' },
+  'image/webp': { ext: 'webp' },
+  'image/bmp': { ext: 'bmp' },
+  'image/heic': { ext: 'heic' },
 }
 
 const IMAGE_MAGIC = {
   'image/png': Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
   'image/jpeg': Buffer.from([0xff, 0xd8, 0xff]),
   'image/gif': Buffer.from([0x47, 0x49, 0x46, 0x38]),
+  'image/webp': Buffer.from([0x52, 0x49, 0x46, 0x46]),
+  'image/bmp': Buffer.from([0x42, 0x4d]),
 }
 
 function isValidImage(mimetype, buffer) {
+  if (!buffer || buffer.length === 0) return false
   const magic = IMAGE_MAGIC[mimetype]
-  if (!magic) return false
+  if (!magic) return buffer.length > 0
   return buffer.length >= magic.length && buffer.subarray(0, magic.length).equals(magic)
 }
 
@@ -33,7 +39,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: config.maxImageSize, files: 1 },
   fileFilter: (req, file, cb) => {
-    if (ALLOWED_MIME[file.mimetype]) return cb(null, true)
+    if (file.mimetype && file.mimetype.startsWith('image/')) return cb(null, true)
     cb(new Error('UNSUPPORTED_TYPE'))
   },
 })
@@ -77,7 +83,8 @@ router.post('/image', upload.single('media'), async (req, res) => {
       return res.status(502).json({ code: 502, safe: false, message: '登录服务异常' })
     }
 
-    filename = `${crypto.randomUUID()}.${ALLOWED_MIME[req.file.mimetype].ext}`
+    const ext = ALLOWED_MIME[req.file.mimetype]?.ext || 'jpg'
+    filename = `${crypto.randomUUID()}.${ext}`
     fs.writeFileSync(`${config.uploadDir}/${filename}`, req.file.buffer)
 
     const data = await mediaCheckAsync({
