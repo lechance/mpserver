@@ -34,7 +34,7 @@ curl -F media=@test.png -F code=<wx.login code> http://localhost:3000/api/sec-ch
 | --- | --- |
 | `APPID` / `APPSECRET` | 小程序凭证（公众平台获取），真实检测必需 |
 | `PORT` | 监听端口，默认 3000 |
-| `MAX_IMAGE_SIZE` | 单张图片大小上限（字节），默认 1M |
+| `MAX_IMAGE_SIZE` | 单张图片大小上限（字节），默认 2M |
 | `PUBLIC_BASE_URL` | 本服务公网 HTTPS 地址，微信需能下载图片（`/media/*`），必须可公网访问且为 443 |
 | `WX_MSG_TOKEN` / `WX_MSG_ENCODING_AES_KEY` | 微信「消息推送配置」的 Token 与 EncodingAESKey，接收异步结果必需 |
 | `SEC_CHECK_SCENE` | 检测场景（1 资料；2 评论；3 论坛；4 社交日志），默认 1 |

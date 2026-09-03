@@ -4,7 +4,7 @@ module.exports = {
   appid: process.env.APPID || '',
   appsecret: process.env.APPSECRET || '',
   port: Number(process.env.PORT) || 3000,
-  maxImageSize: Number(process.env.MAX_IMAGE_SIZE) || 1024 * 1024,
+  maxImageSize: Number(process.env.MAX_IMAGE_SIZE) || 2 * 1024 * 1024,
   publicBaseUrl: process.env.PUBLIC_BASE_URL || '',
   wxMsgToken: process.env.WX_MSG_TOKEN || '',
   wxMsgEncodingAESKey: process.env.WX_MSG_ENCODING_AES_KEY || '',
